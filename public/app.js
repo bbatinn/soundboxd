@@ -202,7 +202,6 @@ function renderAll() {
   renderDiaryTable();
   renderListenlist();
   renderCustomLists();
-  renderTokenRouterStats();
 }
 
 function renderTopFour() {
@@ -289,7 +288,7 @@ function renderRecentReviews() {
           <p class="review-text">${r.review_text ? escapeHtml(r.review_text) : "<em>Sadece puan verildi.</em>"}</p>
           <div class="review-footer">
             <div>${tags}</div>
-            <span>👤 @${escapeHtml(r.username)} • ⚡ ${escapeHtml(r.ai_moderated_by || "Gemini Flash")}</span>
+            <span>👤 @${escapeHtml(r.username)} • 📅 ${escapeHtml(r.listen_date || "Bugün")}</span>
           </div>
         </div>
       </div>
@@ -325,7 +324,6 @@ function renderDiaryTable() {
           <div style="margin-bottom:4px;">${escapeHtml(r.review_text || "")}</div>
           <div>${tags}</div>
         </td>
-        <td><span class="tag-chip" style="color:var(--lb-green);">${escapeHtml(r.ai_moderated_by || "Gemini Flash")}</span></td>
       </tr>
     `;
     })
@@ -361,43 +359,6 @@ function renderCustomLists() {
     .join("");
 }
 
-function renderTokenRouterStats() {
-  const tbody = document.getElementById("tokenSummaryBody");
-  if (tbody) {
-    tbody.innerHTML = (appState.token_summary || [])
-      .map(
-        (row) => `
-      <tr>
-        <td><strong>${row.model_tier}</strong></td>
-        <td>${row.model_name}</td>
-        <td>${row.calls}</td>
-        <td>${row.total_tokens} token</td>
-        <td style="color:var(--lb-green);font-weight:700;">
-          ${row.saved_argon > 0 ? `+${row.saved_argon} Argon Tokenı Korundu` : "Zirve Sentezde Kullanıldı"}
-        </td>
-      </tr>
-    `
-      )
-      .join("");
-  }
-
-  const recentEl = document.getElementById("recentTokenLogs");
-  if (recentEl) {
-    recentEl.innerHTML = (appState.recent_token_logs || [])
-      .map(
-        (lg) => `
-      <div class="token-log-item">
-        <div>
-          <strong>${lg.model_name}</strong> — <span style="color:var(--text-secondary);">${lg.task_type}</span>
-        </div>
-        <div style="font-family:'JetBrains Mono',monospace;color:var(--lb-blue);">
-          ${lg.prompt_tokens + lg.completion_tokens} tok
-        </div>
-      </div>
-    `
-      )
-      .join("");
-  }
 }
 
 // ============================================================================
@@ -615,7 +576,7 @@ function renderModalReviews(track) {
       </div>
       <p style="font-size:0.85rem;color:#e2e8f0;">${r.review_text ? escapeHtml(r.review_text) : ""}</p>
       <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">
-        📅 ${escapeHtml(r.listen_date || "")} • ⚡ Denetim: ${escapeHtml(r.ai_moderated_by || "Gemini 3.8 Flash")}
+        📅 ${escapeHtml(r.listen_date || "Bugün")}
       </div>
     </div>
   `
@@ -732,7 +693,7 @@ async function assistReviewWithClaude() {
   if (!appState.currentModalTrack) return;
   const helperEl = document.getElementById("modalAiHelperOutput");
   helperEl.classList.remove("hidden");
-  helperEl.innerHTML = `✒️ <strong>Claude Sonnet 4.5 (Tier 3)</strong> edebi inceleme kurguluyor (Argon tokenları korunuyor)...`;
+  helperEl.innerHTML = `✒️ İnceleme taslağı oluşturuluyor...`;
 
   const draft = document.getElementById("reviewTextInput").value;
   const data = await callModelRouter("poetic_review", {
@@ -745,8 +706,8 @@ async function assistReviewWithClaude() {
   const poetic = data.result.poetic_review || JSON.stringify(data.result);
   document.getElementById("reviewTextInput").value = poetic.replace(/^“|”$/g, "");
   helperEl.innerHTML = `
-    <div><strong>✒️ ${data.model_name} (${data.model_tier})</strong> tarafından üretildi (${data.usage.total_tokens} token • <strong>+${data.usage.saved_argon_tokens} Argon tokenı korundu</strong>):</div>
-    <div style="margin-top:4px;color:#cbd5e1;">İnceleme metni kutuya aktarıldı, dilediğin gibi düzenleyebilirsin!</div>
+    <div><strong>✒️ İnceleme Önerisi Hazırlandı!</strong></div>
+    <div style="margin-top:4px;color:#cbd5e1;">Metin kutuya aktarıldı, dilediğin gibi düzenleyebilirsin.</div>
   `;
 }
 
@@ -754,7 +715,7 @@ async function assistSimilarWithPro() {
   if (!appState.currentModalTrack) return;
   const helperEl = document.getElementById("modalAiHelperOutput");
   helperEl.classList.remove("hidden");
-  helperEl.innerHTML = `🔷 <strong>Gemini 2.5 Pro (Tier 2)</strong> akustik benzerlik analizi yapıyor...`;
+  helperEl.innerHTML = `🎧 Benzer parçalar aranıyor...`;
 
   const data = await callModelRouter("similar_tracks", {
     track_title: appState.currentModalTrack.title,
@@ -764,80 +725,9 @@ async function assistSimilarWithPro() {
 
   const recs = (data.result.recommendations || []).map((r) => `<li>${r}</li>`).join("");
   helperEl.innerHTML = `
-    <div><strong>🔷 ${data.model_name} (${data.model_tier})</strong> — ${data.result.sonic_signature || ""}</div>
+    <div><strong>🎧 Önerilen Benzer Parçalar:</strong></div>
     <ul style="margin:6px 0 0 18px;">${recs}</ul>
   `;
-}
-
-async function triggerAiDemo(taskType) {
-  const badge = document.getElementById("aiOutputBadge");
-  const stat = document.getElementById("aiOutputTokenStat");
-  const body = document.getElementById("aiOutputBody");
-
-  badge.textContent = "Yönlendiriliyor...";
-  body.innerHTML = "Model Router görev karmaşıklığını analiz ediyor...";
-
-  const sampleTrack = appState.tracks[0] || { title: "Veridis Quo", artist: "Daft Punk", genre: "Electronic" };
-  const data = await callModelRouter(taskType, {
-    track_title: sampleTrack.title,
-    artist: sampleTrack.artist,
-    genre: sampleTrack.genre,
-    review_text: "Gece sürüşünde dinlerken analog synth katmanları insanı başka bir boyuta taşıyor.",
-  });
-
-  badge.textContent = `${data.model_name} • ${data.model_tier}`;
-  stat.textContent = data.cached
-    ? `⚡ ÖNBELLEKTEN (0 Yeni Token Harcandı!)`
-    : `Harcanan: ${data.usage.total_tokens} token | Korunan Argon: +${data.usage.saved_argon_tokens} token`;
-
-  const r = data.result;
-  if (taskType === "moderate_and_tag") {
-    body.innerHTML = `
-      <h4>⚡ ${data.model_name} — Hızlı Denetim & Etiketleme</h4>
-      <p style="margin:6px 0;">${r.summary}</p>
-      <div><strong>Otomatik Etiketler:</strong> ${(r.suggested_tags || []).map((t) => `<span class="tag-chip">#${t}</span>`).join(" ")}</div>
-    `;
-  } else if (taskType === "similar_tracks") {
-    body.innerHTML = `
-      <h4>🔷 ${r.analysis_title}</h4>
-      <p style="margin:6px 0;">${r.sonic_signature}</p>
-      <ul style="margin-left:18px;">${(r.recommendations || []).map((x) => `<li>${x}</li>`).join("")}</ul>
-    `;
-  } else if (taskType === "poetic_review") {
-    body.innerHTML = `
-      <h4>✒️ ${r.editorial_title}</h4>
-      <blockquote style="border-left:3px solid var(--tier-claude);padding-left:12px;margin:8px 0;font-style:italic;color:#f8fafc;">
-        ${r.poetic_review}
-      </blockquote>
-      <div style="font-size:0.82rem;color:var(--text-secondary);"><strong>Metafor Eksenleri:</strong> ${r.lyric_metaphor}</div>
-    `;
-  } else {
-    const axesHtml = Object.entries(r.sonic_axes || {})
-      .map(
-        ([k, v]) => `
-        <div style="margin-bottom:6px;">
-          <div style="display:flex;justify-content:space-between;font-size:0.8rem;"><span>${k}</span><strong>%${v}</strong></div>
-          <div style="background:#1e293b;height:7px;border-radius:4px;overflow:hidden;">
-            <div style="background:linear-gradient(90deg,#a855f7,#00e054);width:${v}%;height:100%;"></div>
-          </div>
-        </div>
-      `
-      )
-      .join("");
-
-    body.innerHTML = `
-      <h4>${r.dna_title}</h4>
-      <p style="font-size:0.8rem;color:#d8b4fe;margin:4px 0 10px;">🛡️ ${r.pipeline_explanation}</p>
-      <div style="background:var(--bg-elevated);padding:12px;border-radius:8px;margin-bottom:12px;">
-        <div style="color:var(--lb-green);font-weight:800;margin-bottom:4px;">Müzikal Arketipin: ${r.archetype}</div>
-        <p>${r.core_analysis}</p>
-      </div>
-      <div style="margin-bottom:12px;">${axesHtml}</div>
-      <div style="background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.4);padding:10px;border-radius:6px;">
-        <strong>💎 ${r.masterpiece_blindspot}</strong>
-      </div>
-    `;
-  }
 }
 
 // ============================================================================
@@ -1061,7 +951,7 @@ function renderAlbumReviews(reviews) {
       </div>
       <p style="font-size:0.85rem;color:#e2e8f0;">${r.review_text ? escapeHtml(r.review_text) : ""}</p>
       <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">
-        📅 ${escapeHtml(r.listen_date || "")} • ⚡ Denetim: ${escapeHtml(r.ai_moderated_by || "Gemini Flash")}
+        📅 ${escapeHtml(r.listen_date || "Bugün")}
       </div>
     </div>
   `

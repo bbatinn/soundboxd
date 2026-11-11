@@ -44,9 +44,6 @@
         <button class="nav-tab" data-tab="listenlist" onclick="switchTab('listenlist')">
           DİNLEME LİSTEM <span id="listenlistBadge" class="badge">0</span>
         </button>
-        <button class="nav-tab nav-tab-ai" data-tab="router" onclick="switchTab('router')">
-          ⚡ AI MODEL ROUTER
-        </button>
         <button class="btn-log-main" onclick="openQuickLogModal()">
           + LOG / PUANLA
         </button>
@@ -59,12 +56,11 @@
     <div class="container hero-inner">
       <div class="hero-copy">
         <div class="hero-eyebrow">
-          <span class="pill-legal">✓ Yasal Public Metadata & 30sn Önizleme</span>
-          <span class="pill-router">⚡ 4-Katmanlı Token Koruma: Flash → Pro → Claude → Argon</span>
+          <span class="pill-legal">Müziğin Sosyal Günlüğü</span>
         </div>
         <h1>Dinlediğin şarkıları puanla.<br/><em>Ruhuna dokunanları</em> günlüğüne kaydet.</h1>
         <p class="hero-sub">
-          Müzisyenlerden tek tek izin almana gerek yok: Resmi katalog üstverileri (metadata) ile milyonlarca şarkıyı anında ara, yarım yıldız hassasiyetiyle (0.5★ – 5.0★) puanla, incelemeni yaz.
+          Milyonlarca şarkıyı ve albümü anında ara, yarım yıldız hassasiyetiyle (0.5★ – 5.0★) puanla, incelemelerini paylaş ve kişisel dinleme günlüğünü oluştur.
         </p>
       </div>
       <!-- Profile Top 4 Favorites Showcase (Letterboxd "Four Favorites") -->
@@ -103,7 +99,7 @@
       <div class="section-header mt-large">
         <div>
           <h2>SON TOPLULUK İNCELEMELERİ</h2>
-          <p class="section-subtitle">Her yeni inceleme önce <strong>Gemini Flash (Tier 1)</strong> ile düşük token maliyetiyle denetlenir ve etiketlenir.</p>
+          <p class="section-subtitle">Topluluğun en son paylaştığı şarkı incelemeleri ve puanları.</p>
         </div>
       </div>
       <div id="recentReviewsList" class="reviews-stream"></div>
@@ -145,7 +141,6 @@
               <th>PUAN</th>
               <th>BEĞENİ</th>
               <th>İNCELEME & ETİKETLER</th>
-              <th>AI DENETİM</th>
             </tr>
           </thead>
           <tbody id="diaryTableBody"></tbody>
@@ -174,94 +169,6 @@
         </div>
       </div>
       <div id="listenlistGrid" class="poster-grid"></div>
-    </section>
-
-    <!-- TAB 5: 4-TIER MULTI-MODEL AI ROUTER & TOKEN OPTIMIZER -->
-    <section id="tab-router" class="tab-panel">
-      <div class="router-hero">
-        <div>
-          <span class="badge-argon-shield">🛡️ ARGON TOKEN KORUMA MİMARİSİ AKTİF</span>
-          <h2>4-Katmanlı Yapay Zeka Model Yönlendirici (Flash → Pro → Claude → Argon)</h2>
-          <p>
-            Senin belirttiğin gibi <strong>Gemini 4 Argon</strong> sistemdeki en değerli ve en güçlü modeldir.
-            Bu yüzden basit işlerde asla Argon harcanmaz! İşlemler zorluk derecesine göre sırasıyla
-            <strong>Gemini Flash</strong>, <strong>Gemini Pro</strong> ve <strong>Claude Sonnet 4.5</strong> üzerinden geçer;
-            <strong>Argon</strong> yalnızca en son aşamada derin <em>Müzikal DNA Sentezi</em> için kullanılır.
-          </p>
-        </div>
-      </div>
-
-      <!-- 4-Tier Pipeline Cards -->
-      <div class="tier-cards-grid">
-        <div class="tier-card tier-flash">
-          <div class="tier-badge">1. ADIM • GÜNLÜK YÜK %70</div>
-          <h3>⚡ Gemini 3.8 Flash</h3>
-          <p class="tier-role">Yorum Moderasyonu, Spam Filtresi, Otomatik Tür/Mood Etiketleme</p>
-          <div class="tier-meta">Maliyet Çarpanı: <strong>1x (En Ekonomik)</strong></div>
-          <button class="btn-tier" onclick="triggerAiDemo('moderate_and_tag')">Flash ile Test Et</button>
-        </div>
-
-        <div class="tier-card tier-pro">
-          <div class="tier-badge">2. ADIM • ANALİTİK %18</div>
-          <h3>🔷 Gemini 2.5 Pro</h3>
-          <p class="tier-role">Akustik Benzerlik, Ritim/Bas Eşleştirme & Liste Önerisi</p>
-          <div class="tier-meta">Maliyet Çarpanı: <strong>4x (Dengeli)</strong></div>
-          <button class="btn-tier" onclick="triggerAiDemo('similar_tracks')">Pro ile Benzer Şarkı Bul</button>
-        </div>
-
-        <div class="tier-card tier-claude">
-          <div class="tier-badge">3. ADIM • EDEBİ & SANATSAL %9</div>
-          <h3>✒️ Claude Sonnet 4.5</h3>
-          <p class="tier-role">Letterboxd Tarzı Şiirsel/Edebi Eleştiri Yazımı & Şarkı Sözü Metafor Analizi</p>
-          <div class="tier-meta">Maliyet Çarpanı: <strong>6x (Yaratıcı Kalem)</strong></div>
-          <button class="btn-tier" onclick="triggerAiDemo('poetic_review')">Claude ile Edebi İnceleme Üret</button>
-        </div>
-
-        <div class="tier-card tier-argon">
-          <div class="tier-badge">4. SON ADIM • EN DEĞERLİ MODEL %3</div>
-          <h3>💎 Gemini 4 Argon</h3>
-          <p class="tier-role">Zirve Sentez: Flash+Pro+Claude Çıktılarını Birleştirip Derin Müzikal DNA Haritası Çıkarır</p>
-          <div class="tier-meta">Maliyet Çarpanı: <strong>15x (Sadece En Son Çağrılır)</strong></div>
-          <button class="btn-tier btn-tier-argon" onclick="triggerAiDemo('musical_dna_argon')">
-            💎 Argon Müzikal DNA Sentezini Çalıştır
-          </button>
-        </div>
-      </div>
-
-      <!-- Live AI Output Box -->
-      <div id="aiLiveOutputCard" class="ai-output-card">
-        <div class="ai-output-header">
-          <span id="aiOutputBadge" class="ai-badge">Hazır</span>
-          <span id="aiOutputTokenStat" class="ai-token-stat">Bir model testi seçin veya şarkı puanlayın</span>
-        </div>
-        <div id="aiOutputBody" class="ai-output-body">
-          Yukarıdaki 4 katmandan herhangi birine tıklayarak model yönlendiricinin (Model Router) nasıl çalıştığını ve <strong>Gemini 4 Argon</strong> tokenlarını nasıl koruduğunu canlı görebilirsin.
-        </div>
-      </div>
-
-      <!-- Token Telemetry Table -->
-      <div class="telemetry-grid">
-        <div class="telemetry-box">
-          <h3>📊 Model Bazlı Token Kullanım Özeti</h3>
-          <table class="diary-table">
-            <thead>
-              <tr>
-                <th>KATMAN</th>
-                <th>MODEL</th>
-                <th>ÇAĞRI SAYISI</th>
-                <th>HARCANAN TOKEN</th>
-                <th>KORUNAN ARGON TOKENI</th>
-              </tr>
-            </thead>
-            <tbody id="tokenSummaryBody"></tbody>
-          </table>
-        </div>
-
-        <div class="telemetry-box">
-          <h3>📜 Son Yönlendirme Kayıtları (Routing Log)</h3>
-          <div id="recentTokenLogs" class="token-log-list"></div>
-        </div>
-      </div>
     </section>
 
   </main>
@@ -374,11 +281,11 @@
               <div class="textarea-header">
                 <label for="reviewTextInput">İNCELEME / NOTUN</label>
                 <div class="ai-assist-pills">
-                  <button type="button" class="pill-claude" onclick="assistReviewWithClaude()" title="Claude Sonnet 4.5 (Tier 3) ile notunu Letterboxd tarzı edebi bir incelemeye dönüştür">
-                    ✒️ Claude ile Edebi İnceleme Yaz
+                  <button type="button" class="pill-claude" onclick="assistReviewWithClaude()" title="Letterboxd tarzı edebi bir inceleme taslağı oluştur">
+                    ✒️ Edebi İnceleme Öner
                   </button>
-                  <button type="button" class="pill-pro" onclick="assistSimilarWithPro()" title="Gemini Pro (Tier 2) ile bu şarkıya benzeyen parçaları analiz et">
-                    🔷 Gemini Pro Analizi
+                  <button type="button" class="pill-pro" onclick="assistSimilarWithPro()" title="Bu şarkıya benzeyen benzer parçaları listele">
+                    🎧 Benzer Parçalar
                   </button>
                 </div>
               </div>
@@ -395,10 +302,10 @@
               <input
                 type="text"
                 id="reviewTagsInput"
-                placeholder="Etiketler (boş bırakırsan Gemini Flash otomatik etiketler)"
+                placeholder="Etiketler ekle (örn: gece, melankolik, bas, synth)"
               />
               <button type="submit" class="btn-save-log">
-                KAYDET (Flash Tier-1 Denetimiyle)
+                KAYDET
               </button>
             </div>
           </form>
@@ -497,7 +404,7 @@
                 </button>
               </div>
             </div>
-            <textarea id="albumReviewInput" rows="2" placeholder="Tüm albüm hakkında genel görüşün (Flash Tier-1 ile otomatik denetlenir)..."></textarea>
+            <textarea id="albumReviewInput" rows="2" placeholder="Bu albüm hakkındaki düşüncelerin ve öne çıkan parçalar..."></textarea>
             <div style="display:flex;justify-content:flex-end;">
               <button type="submit" class="btn-save-log">ALBÜMÜ PUANLA & KAYDET</button>
             </div>
