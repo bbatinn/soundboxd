@@ -504,6 +504,168 @@ def enrich_tracks_with_stats(tracks):
     return enriched
 
 
+def enrich_albums_with_stats(albums):
+    conn = get_db()
+    cur = conn.cursor()
+    enriched = []
+    for a in albums:
+        aid = a["id"]
+        cur.execute(
+            """
+            SELECT COUNT(*) as review_count,
+                   ROUND(AVG(rating), 2) as avg_rating,
+                   SUM(liked) as likes_count
+            FROM album_reviews WHERE album_id = ?
+            """,
+            (aid,),
+        )
+        stat = cur.fetchone()
+        cur.execute(
+            "SELECT rating, COUNT(*) as cnt FROM album_reviews WHERE album_id = ? GROUP BY rating",
+            (aid,),
+        )
+        hist = {str(float(i) / 2): 0 for i in range(1, 11)}
+        for r in cur.fetchall():
+            key = str(float(r["rating"]))
+            if key in hist:
+                hist[key] = r["cnt"]
+
+        a_copy = dict(a)
+        a_copy["review_count"] = stat["review_count"] or 0
+        a_copy["avg_rating"] = stat["avg_rating"] if stat["avg_rating"] is not None else 0.0
+        a_copy["likes_count"] = stat["likes_count"] or 0
+        a_copy["histogram"] = hist
+        enriched.append(a_copy)
+    conn.close()
+    return enriched
+
+
+def search_albums_catalog(query: str, limit: int = 12):
+    results = []
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        encoded = urllib.parse.quote(query)
+        url = f"https://itunes.apple.com/search?term={encoded}&entity=album&limit={limit}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Soundboxd/1.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            for item in data.get("results", []):
+                col_id = str(item.get("collectionId"))
+                album_id = f"itunes-album-{col_id}"
+                artwork = item.get("artworkUrl100", "").replace("100x100bb", "600x600bb")
+                release_date = item.get("releaseDate", "2020")
+                year = int(release_date[:4]) if release_date and release_date[:4].isdigit() else 2020
+                track_count = item.get("trackCount", 10)
+
+                album_obj = {
+                    "id": album_id,
+                    "title": item.get("collectionName", "Unknown Album"),
+                    "artist": item.get("artistName", "Unknown Artist"),
+                    "release_year": year,
+                    "genre": item.get("primaryGenreName", "Music"),
+                    "track_count": track_count,
+                    "cover_url": artwork,
+                    "external_url": col_id,
+                }
+                cur.execute(
+                    """
+                    INSERT INTO albums (id, title, artist, release_year, genre, track_count, cover_url, external_url)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE albums.cover_url END
+                    """,
+                    (
+                        album_obj["id"],
+                        album_obj["title"],
+                        album_obj["artist"],
+                        album_obj["release_year"],
+                        album_obj["genre"],
+                        album_obj["track_count"],
+                        album_obj["cover_url"],
+                        album_obj["external_url"],
+                    ),
+                )
+                results.append(album_obj)
+        conn.commit()
+    except Exception:
+        pass
+
+    q_like = f"%{query}%"
+    cur.execute(
+        """
+        SELECT * FROM albums
+        WHERE title LIKE ? OR artist LIKE ? OR genre LIKE ?
+        LIMIT ?
+        """,
+        (q_like, q_like, q_like, limit),
+    )
+    local_rows = [dict(r) for r in cur.fetchall()]
+    seen_ids = {r["id"] for r in results}
+    for row in local_rows:
+        if row["id"] not in seen_ids:
+            results.insert(0, row)
+            seen_ids.add(row["id"])
+    conn.close()
+    return enrich_albums_with_stats(results[:limit])
+
+
+def get_album_with_tracklist(album_id: str):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM albums WHERE id = ?", (album_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return None
+
+    album = enrich_albums_with_stats([dict(row)])[0]
+    col_id = album.get("external_url") or ""
+
+    tracks = []
+    # If collectionId exists, fetch real full tracklist via iTunes lookup
+    if col_id and col_id.isdigit():
+        try:
+            lookup_url = f"https://itunes.apple.com/lookup?id={col_id}&entity=song"
+            req = urllib.request.Request(lookup_url, headers={"User-Agent": "Soundboxd/1.0"})
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                for item in data.get("results", [])[1:]:
+                    tid = f"itunes-{item.get('trackId')}"
+                    t_title = item.get("trackName", "Track")
+                    dur_sec = int(item.get("trackTimeMillis", 180000) / 1000)
+                    preview = item.get("previewUrl", "")
+                    track_num = item.get("trackNumber", 1)
+                    tracks.append(
+                        {
+                            "id": tid,
+                            "track_number": track_num,
+                            "title": t_title,
+                            "duration_sec": dur_sec,
+                            "preview_url": preview,
+                            "rating": None,
+                        }
+                    )
+        except Exception:
+            pass
+
+    # Check local ratings for each track in this album
+    for t in tracks:
+        cur.execute("SELECT ROUND(AVG(rating), 1) as r FROM reviews WHERE track_id = ?", (t["id"],))
+        st = cur.fetchone()
+        t["rating"] = st["r"] if st and st["r"] is not None else None
+
+    # Calculate average track rating across reviewed songs in the album
+    rated_scores = [t["rating"] for t in tracks if t["rating"] is not None]
+    album["avg_track_score"] = round(sum(rated_scores) / len(rated_scores), 2) if rated_scores else None
+
+    cur.execute("SELECT * FROM album_reviews WHERE album_id = ? ORDER BY id DESC", (album_id,))
+    album["reviews"] = [dict(r) for r in cur.fetchall()]
+    album["tracks"] = tracks
+    conn.close()
+    return album
+
+
 # ============================================================================
 # 4-TIER MULTI-MODEL AI ROUTER (FLASH -> PRO -> CLAUDE -> ARGON LAST!)
 # ============================================================================
@@ -958,6 +1120,28 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
             conn.close()
             return self._send_json(track)
 
+        if path == "/api/albums":
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM albums ORDER BY release_year DESC LIMIT 30")
+            albums = enrich_albums_with_stats([dict(r) for r in cur.fetchall()])
+            conn.close()
+            return self._send_json({"albums": albums})
+
+        if path == "/api/album":
+            aid = qs.get("id", [""])[0].strip()
+            album_data = get_album_with_tracklist(aid)
+            if not album_data:
+                return self._send_json({"error": "Albüm bulunamadı"}, 404)
+            return self._send_json(album_data)
+
+        if path == "/api/albums/search":
+            q = qs.get("q", [""])[0].strip()
+            if not q:
+                return self._send_json({"results": []})
+            results = search_albums_catalog(q, limit=12)
+            return self._send_json({"results": results})
+
         return super().do_GET()
 
     def do_POST(self):
@@ -1010,6 +1194,51 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
                     review_text,
                     listen_date,
                     final_tags,
+                    flash_res["model_name"],
+                ),
+            )
+            conn.commit()
+            conn.close()
+            return self._send_json({"ok": True, "ai_routing": flash_res})
+
+        if path == "/api/album/review":
+            album_id = body.get("album_id")
+            rating = float(body.get("rating", 4.5))
+            liked = 1 if body.get("liked") else 0
+            review_text = body.get("review_text", "").strip()
+            listen_date = body.get("listen_date") or datetime.now().strftime("%Y-%m-%d")
+            username = body.get("username", "batin")
+
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM albums WHERE id = ?", (album_id,))
+            album_row = cur.fetchone()
+            if not album_row:
+                conn.close()
+                return self._send_json({"error": "Album not found"}, 404)
+
+            flash_res = MultiModelRouter.route_task(
+                "moderate_and_tag",
+                {
+                    "track_title": album_row["title"],
+                    "artist": album_row["artist"],
+                    "genre": album_row["genre"],
+                    "review_text": review_text,
+                },
+            )
+
+            cur.execute(
+                """
+                INSERT INTO album_reviews (album_id, username, rating, liked, review_text, listen_date, ai_moderated_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    album_id,
+                    username,
+                    rating,
+                    liked,
+                    review_text,
+                    listen_date,
                     flash_res["model_name"],
                 ),
             )

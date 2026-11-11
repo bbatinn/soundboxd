@@ -1,9 +1,9 @@
-# Soundboxd 🎵 (Letterboxd for Music)
+# SongLarp 🎵 (Letterboxd for Music & Albums)
 
 > 🌐 **CANLI SİTEYE GİRİŞ:** [https://cuisine-mpg-ipaq-perspective.trycloudflare.com](https://cuisine-mpg-ipaq-perspective.trycloudflare.com)  
 > *(Bilgisayarın açık olduğu sürece bu linkten herkes doğrudan siteyi kullanabilir!)*
 
-Soundboxd, tıpkı Letterboxd'un sinema için yaptığı gibi, insanların müzikleri/şarkıları 0.5★ ile 5.0★ arasında puanlamasını, inceleme yazmasını, dinleme günlüğü (diary) tutmasını ve listeler oluşturmasını sağlayan tam teşekküllü bir müzik platformudur.
+SongLarp, insanların şarkıları ve albümleri 0.5★ ile 5.0★ arasında puanlamasını, inceleme yazmasını, dinleme günlüğü (diary) tutmasını, albüm şarkı listelerini (tracklist) tek tek incelemesini ve listeler oluşturmasını sağlayan müzik platformudur.
 
 ---
 

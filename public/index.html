@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Soundboxd — Müzik için Letterboxd | Puanla, İncele, Keşfet</title>
+  <title>SongLarp — Müzik & Albüm Puanlama Günlüğü | Letterboxd for Music</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -19,7 +19,7 @@
           <span class="dot dot-green"></span>
           <span class="dot dot-blue"></span>
         </span>
-        <span class="brand-title">SOUNDBOXD</span>
+        <span class="brand-title">SONGLARP</span>
       </a>
 
       <!-- Global Live Music Search (iTunes / Spotify Public Metadata) -->
@@ -27,7 +27,7 @@
         <input
           type="text"
           id="globalSearchInput"
-          placeholder="Dünyadaki herhangi bir şarkıyı, albümü veya sanatçıyı ara (İzin gerekmez)..."
+          placeholder="Dünyadaki herhangi bir şarkıyı, albümü veya sanatçıyı ara..."
           autocomplete="off"
         />
         <button class="search-btn" id="globalSearchBtn" title="Ara">🔍</button>
@@ -35,6 +35,7 @@
 
       <nav class="nav-links">
         <button class="nav-tab active" data-tab="discover" onclick="switchTab('discover')">ŞARKILAR</button>
+        <button class="nav-tab" data-tab="albums" onclick="switchTab('albums')">💿 ALBÜMLER</button>
         <button class="nav-tab" data-tab="diary" onclick="switchTab('diary')">GÜNLÜK & İNCELEMELER</button>
         <button class="nav-tab" data-tab="lists" onclick="switchTab('lists')">LİSTELER</button>
         <button class="nav-tab" data-tab="listenlist" onclick="switchTab('listenlist')">
@@ -103,6 +104,23 @@
         </div>
       </div>
       <div id="recentReviewsList" class="reviews-stream"></div>
+    </section>
+
+    <!-- TAB: ALBUMS (ALBUM MODE) -->
+    <section id="tab-albums" class="tab-panel">
+      <div class="section-header">
+        <div>
+          <h2>💿 ALBÜM PUANLAMA MODU (ALBUM MODE)</h2>
+          <p class="section-subtitle">Tüm albümü baştan sona değerlendir, şarkı şarkı puan ver veya albümün bütününe tek yıldız bas.</p>
+        </div>
+        <div class="filter-bar">
+          <button class="chip active" onclick="loadAlbums()">Tüm Albümler</button>
+          <button class="chip" onclick="searchAlbumsDirect('Rock')">Rock</button>
+          <button class="chip" onclick="searchAlbumsDirect('Electronic')">Elektronik</button>
+          <button class="chip" onclick="searchAlbumsDirect('Hip-Hop')">Hip-Hop / Rap</button>
+        </div>
+      </div>
+      <div id="albumsGrid" class="poster-grid"></div>
     </section>
 
     <!-- TAB 2: DIARY & REVIEWS -->
@@ -396,6 +414,88 @@
         <div id="newListTrackCheckboxes" class="checkbox-track-list"></div>
         <button type="submit" class="btn-save-log mt-small">Listeyi Oluştur</button>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ALBUM DETAIL & TRACKLIST RATING -->
+  <div id="albumModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeAlbumModal()">
+    <div class="modal-card modal-large">
+      <button class="modal-close" onclick="closeAlbumModal()">✕</button>
+      <div class="modal-grid">
+        <!-- Left: Album Poster, Rating Stats -->
+        <div class="modal-left">
+          <img id="albumModalCover" class="modal-cover" src="" alt="Album Cover" />
+          <div class="album-stats-badge">
+            <div>Albüm Puanı: <strong id="albumModalAvgRating" style="color:var(--lb-green);">5.0 ★</strong></div>
+            <div id="albumModalTrackAvgLine" style="font-size:0.75rem;color:var(--text-secondary);margin-top:2px;">
+              Şarkıların Ortalaması: <strong id="albumModalTrackAvgScore">—</strong>
+            </div>
+          </div>
+          <div class="histogram-box mt-small">
+            <div class="histogram-header">
+              <span>ALBÜM PUAN DAĞILIMI</span>
+            </div>
+            <div id="albumModalHistogramBars" class="histogram-bars"></div>
+          </div>
+        </div>
+
+        <!-- Right: Album Meta, Rate Form, Full Tracklist -->
+        <div class="modal-right">
+          <div class="modal-track-meta">
+            <span id="albumModalGenre" class="genre-pill">Album Genre</span>
+            <h2 id="albumModalTitle">Albüm Adı</h2>
+            <p class="modal-artist-line">
+              <strong id="albumModalArtist">Sanatçı</strong> • <span id="albumModalYear">2024</span> • <span id="albumModalTrackCount">10</span> Parça
+            </p>
+          </div>
+
+          <!-- Album Rate Form -->
+          <form onsubmit="submitAlbumReviewForm(event)" class="log-form">
+            <div class="rating-row">
+              <div class="star-picker-group">
+                <label>ALBÜM PUANIN (0.5★ – 5.0★)</label>
+                <div class="star-slider-wrap">
+                  <input
+                    type="range"
+                    id="albumRatingRange"
+                    min="0.5"
+                    max="5.0"
+                    step="0.5"
+                    value="5.0"
+                    oninput="updateAlbumStarDisplay(this.value)"
+                  />
+                  <span id="albumStarDisplay" class="star-visual">★★★★★ (5.0)</span>
+                </div>
+              </div>
+              <div class="like-picker-group">
+                <label>BEĞENİ</label>
+                <button type="button" id="albumLikeBtn" class="like-btn active" onclick="toggleAlbumLikeBtn()">
+                  ♥ Favori Albüm
+                </button>
+              </div>
+            </div>
+            <textarea id="albumReviewInput" rows="2" placeholder="Tüm albüm hakkında genel görüşün (Flash Tier-1 ile otomatik denetlenir)..."></textarea>
+            <div style="display:flex;justify-content:flex-end;">
+              <button type="submit" class="btn-save-log">ALBÜMÜ PUANLA & KAYDET</button>
+            </div>
+          </form>
+
+          <!-- Tracklist -->
+          <div class="album-tracklist-section">
+            <div class="section-header" style="margin-bottom:10px;">
+              <h3 style="font-size:0.88rem;letter-spacing:0.8px;">ŞARKI LİSTESİ & TEK TEK PUANLAMA</h3>
+              <span style="font-size:0.75rem;color:var(--text-muted);">Önizleme dinlemek veya puanlamak için şarkıya tıkla</span>
+            </div>
+            <div id="albumTracklistTable" class="album-tracklist-list"></div>
+          </div>
+
+          <!-- Album Reviews List -->
+          <div class="modal-reviews-section mt-large">
+            <h3>BU ALBÜM İÇİN YAZILAN İNCELEMELER</h3>
+            <div id="albumReviewsList" class="modal-reviews-list"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

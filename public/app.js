@@ -5,6 +5,7 @@
 
 let appState = {
   tracks: [],
+  albums: [],
   reviews: [],
   favorites: [],
   listenlist: [],
@@ -12,7 +13,9 @@ let appState = {
   token_summary: [],
   recent_token_logs: [],
   currentModalTrack: null,
+  currentModalAlbum: null,
   currentLiked: true,
+  albumLiked: true,
   backendAvailable: true,
 };
 
@@ -824,6 +827,240 @@ async function submitNewList(e) {
 }
 
 // ============================================================================
+// ALBUM MODE (ALBÜM PUANLAMA & ŞARKI LİSTESİ)
+// ============================================================================
+async function loadAlbums() {
+  if (appState.backendAvailable) {
+    try {
+      const res = await fetch("/api/albums");
+      const data = await res.json();
+      appState.albums = data.albums || [];
+    } catch (_) {}
+  }
+  renderAlbumsGrid(appState.albums);
+}
+
+function renderAlbumsGrid(albums) {
+  const grid = document.getElementById("albumsGrid");
+  if (!grid) return;
+  if (!albums || albums.length === 0) {
+    grid.innerHTML = `<p style="color:var(--text-secondary);">Albüm bulunamadı.</p>`;
+    return;
+  }
+
+  grid.innerHTML = albums
+    .map((a) => {
+      const avg = a.avg_rating && a.avg_rating > 0 ? `${a.avg_rating.toFixed(1)} ★` : "Yeni";
+      return `
+      <div class="track-card">
+        <div class="poster-wrap" onclick="openAlbumModal('${a.id}')">
+          <img src="${a.cover_url}" alt="${a.title}" loading="lazy" onerror="this.src='https://placehold.co/400x400/1b2228/00e054?text=Album'" />
+          <span class="rating-pill-corner">${avg}</span>
+          <div class="poster-overlay">
+            <div class="overlay-actions">
+              <button class="btn-overlay" onclick="event.stopPropagation(); openAlbumModal('${a.id}')">
+                💿 Albümü İncele & Puanla
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="card-info" onclick="openAlbumModal('${a.id}')">
+          <div class="card-title" title="${a.title}"><strong>${a.title}</strong></div>
+          <div class="card-artist" title="${a.artist}">${a.artist}</div>
+          <div class="card-meta-row">
+            <span>${a.release_year || ""} • ${a.track_count || 10} Şarkı</span>
+            <span>💬 ${a.review_count || 0}</span>
+          </div>
+        </div>
+      </div>
+    `;
+    })
+    .join("");
+}
+
+async function searchAlbumsDirect(query) {
+  if (appState.backendAvailable) {
+    const res = await fetch(`/api/albums/search?q=${encodeURIComponent(query)}`);
+    const data = await res.json();
+    if (data.results) {
+      renderAlbumsGrid(data.results);
+    }
+  }
+}
+
+async function openAlbumModal(albumId) {
+  if (appState.backendAvailable) {
+    try {
+      const res = await fetch(`/api/album?id=${encodeURIComponent(albumId)}`);
+      if (res.ok) {
+        const album = await res.json();
+        appState.currentModalAlbum = album;
+
+        document.getElementById("albumModalCover").src = album.cover_url;
+        document.getElementById("albumModalTitle").textContent = album.title;
+        document.getElementById("albumModalArtist").textContent = album.artist;
+        document.getElementById("albumModalYear").textContent = album.release_year || "";
+        document.getElementById("albumModalTrackCount").textContent = album.track_count || (album.tracks || []).length;
+        document.getElementById("albumModalGenre").textContent = album.genre || "Music";
+
+        const avgScore = album.avg_rating ? `${album.avg_rating.toFixed(1)} ★` : "Henüz Puan Yok";
+        document.getElementById("albumModalAvgRating").textContent = avgScore;
+
+        const trackAvgEl = document.getElementById("albumModalTrackAvgScore");
+        if (album.avg_track_score) {
+          trackAvgEl.textContent = `${album.avg_track_score} ★`;
+        } else {
+          trackAvgEl.textContent = "— (Şarkılar henüz oylanmadı)";
+        }
+
+        renderAlbumTracklist(album.tracks || []);
+        renderAlbumHistogram(album.histogram || {});
+        renderAlbumReviews(album.reviews || []);
+
+        document.getElementById("albumModal").classList.remove("hidden");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }
+}
+
+function renderAlbumTracklist(tracks) {
+  const box = document.getElementById("albumTracklistTable");
+  if (!box) return;
+  if (!tracks || tracks.length === 0) {
+    box.innerHTML = `<div style="padding:12px;color:var(--text-muted);">Şarkı listesi yüklenemedi.</div>`;
+    return;
+  }
+
+  box.innerHTML = tracks
+    .map((t) => {
+      const min = Math.floor(t.duration_sec / 60);
+      const sec = String(t.duration_sec % 60).padStart(2, "0");
+      const rText = t.rating ? `<span class="review-stars">${t.rating}★</span>` : `<span style="color:var(--text-muted);font-size:0.75rem;">Oyla</span>`;
+      return `
+      <div class="album-track-row">
+        <div class="album-track-left" onclick="quickPlayPreviewDirect('${t.preview_url}', '${t.title.replace(/'/g, "\\'")}', '${appState.currentModalAlbum.artist.replace(/'/g, "\\'")}', '${appState.currentModalAlbum.cover_url}')">
+          <span class="album-track-num">${t.track_number}</span>
+          <strong>${t.title}</strong>
+        </div>
+        <div class="album-track-right">
+          <span style="color:var(--text-muted);font-size:0.74rem;">${min}:${sec}</span>
+          ${t.preview_url ? `<button class="btn-mini-play" onclick="quickPlayPreviewDirect('${t.preview_url}', '${t.title.replace(/'/g, "\\'")}', '${appState.currentModalAlbum.artist.replace(/'/g, "\\'")}', '${appState.currentModalAlbum.cover_url}')">▶ Dinle</button>` : ""}
+          <span style="min-width:35px;text-align:right;">${rText}</span>
+        </div>
+      </div>
+    `;
+    })
+    .join("");
+}
+
+function quickPlayPreviewDirect(url, title, artist, cover) {
+  if (!url) {
+    alert("Bu şarkının önizlemesi bulunamadı.");
+    return;
+  }
+  const bar = document.getElementById("audioPlayerBar");
+  const audio = document.getElementById("audioElement");
+  document.getElementById("playerCover").src = cover;
+  document.getElementById("playerTitle").textContent = title;
+  document.getElementById("playerArtist").textContent = `${artist} • 30sn Yasal Önizleme`;
+  bar.classList.remove("hidden");
+  audio.src = url;
+  audio.play().catch(() => {});
+}
+
+function renderAlbumHistogram(hist) {
+  const barsEl = document.getElementById("albumModalHistogramBars");
+  if (!barsEl) return;
+  const steps = ["0.5", "1.0", "1.5", "2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0"];
+  const maxVal = Math.max(1, ...steps.map((s) => hist[s] || 0));
+
+  barsEl.innerHTML = steps
+    .map((s) => {
+      const cnt = hist[s] || 0;
+      const pct = Math.max(6, Math.round((cnt / maxVal) * 100));
+      return `
+      <div class="hist-bar-col" title="${s}★: ${cnt} oy">
+        <div class="hist-bar" style="height:${pct}%;opacity:${cnt > 0 ? 1 : 0.25}"></div>
+        <span class="hist-label">${s}</span>
+      </div>
+    `;
+    })
+    .join("");
+}
+
+function renderAlbumReviews(reviews) {
+  const box = document.getElementById("albumReviewsList");
+  if (!box) return;
+  if (!reviews || reviews.length === 0) {
+    box.innerHTML = `<p style="color:var(--text-muted);font-size:0.82rem;">Bu albüm için ilk incelemeyi sen yaz!</p>`;
+    return;
+  }
+
+  box.innerHTML = reviews
+    .map(
+      (r) => `
+    <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:6px;padding:10px;">
+      <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:4px;">
+        <strong>👤 @${r.username}</strong>
+        <span class="review-stars">${formatStars(r.rating)} ${r.liked ? '<span class="review-heart">♥</span>' : ""}</span>
+      </div>
+      <p style="font-size:0.85rem;color:#e2e8f0;">${r.review_text || ""}</p>
+      <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">
+        📅 ${r.listen_date || ""} • ⚡ Denetim: ${r.ai_moderated_by || "Gemini Flash"}
+      </div>
+    </div>
+  `
+    )
+    .join("");
+}
+
+function updateAlbumStarDisplay(val) {
+  const disp = document.getElementById("albumStarDisplay");
+  if (disp) {
+    disp.textContent = `${formatStars(val)} (${parseFloat(val).toFixed(1)})`;
+  }
+}
+
+function toggleAlbumLikeBtn() {
+  appState.albumLiked = !appState.albumLiked;
+  const btn = document.getElementById("albumLikeBtn");
+  if (btn) {
+    btn.classList.toggle("active", appState.albumLiked);
+    btn.textContent = appState.albumLiked ? "♥ Favori Albüm" : "♡ Beğen";
+  }
+}
+
+async function submitAlbumReviewForm(e) {
+  e.preventDefault();
+  if (!appState.currentModalAlbum) return;
+
+  const payload = {
+    album_id: appState.currentModalAlbum.id,
+    rating: parseFloat(document.getElementById("albumRatingRange").value),
+    liked: appState.albumLiked,
+    review_text: document.getElementById("albumReviewInput").value.trim(),
+    listen_date: new Date().toISOString().slice(0, 10),
+    username: "batin",
+  };
+
+  if (appState.backendAvailable) {
+    await fetch("/api/album/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    await openAlbumModal(appState.currentModalAlbum.id);
+    await loadAlbums();
+  }
+}
+
+function closeAlbumModal() {
+  document.getElementById("albumModal").classList.add("hidden");
+}
+
+// ============================================================================
 // TAB SWITCHING & INITIALIZATION
 // ============================================================================
 function switchTab(tabName) {
@@ -835,6 +1072,10 @@ function switchTab(tabName) {
 
   const btn = document.querySelector(`.nav-tab[data-tab="${tabName}"]`);
   if (btn) btn.classList.add("active");
+
+  if (tabName === "albums") {
+    loadAlbums();
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
