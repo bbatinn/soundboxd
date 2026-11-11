@@ -10,6 +10,9 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <!-- TOAST NOTIFICATION -->
+  <div id="toastBanner" class="toast-banner hidden"></div>
+
   <!-- TOP NAVIGATION BAR (Letterboxd Signature Style) -->
   <header class="navbar">
     <div class="container nav-inner">
@@ -330,6 +333,16 @@
             <div class="rating-row">
               <div class="star-picker-group">
                 <label>PUANIN (0.5★ – 5.0★)</label>
+                <div class="interactive-stars-row">
+                  <div class="interactive-star-buttons" id="trackStarButtons">
+                    <button type="button" onclick="setPickerRating(1.0)">★</button>
+                    <button type="button" onclick="setPickerRating(2.0)">★</button>
+                    <button type="button" onclick="setPickerRating(3.0)">★</button>
+                    <button type="button" onclick="setPickerRating(4.0)">★</button>
+                    <button type="button" onclick="setPickerRating(5.0)">★</button>
+                  </div>
+                  <span id="starVisualDisplay" class="star-visual">★★★★½ (4.5)</span>
+                </div>
                 <div class="star-slider-wrap">
                   <input
                     type="range"
@@ -340,7 +353,7 @@
                     value="4.5"
                     oninput="updateStarDisplay(this.value)"
                   />
-                  <span id="starVisualDisplay" class="star-visual">★★★★½ (4.5)</span>
+                  <span class="range-sub-hint">Hassas yarım yıldız (0.5★) için kaydır</span>
                 </div>
               </div>
 
@@ -454,6 +467,16 @@
             <div class="rating-row">
               <div class="star-picker-group">
                 <label>ALBÜM PUANIN (0.5★ – 5.0★)</label>
+                <div class="interactive-stars-row">
+                  <div class="interactive-star-buttons" id="albumStarButtons">
+                    <button type="button" onclick="setAlbumPickerRating(1.0)">★</button>
+                    <button type="button" onclick="setAlbumPickerRating(2.0)">★</button>
+                    <button type="button" onclick="setAlbumPickerRating(3.0)">★</button>
+                    <button type="button" onclick="setAlbumPickerRating(4.0)">★</button>
+                    <button type="button" onclick="setAlbumPickerRating(5.0)">★</button>
+                  </div>
+                  <span id="albumStarDisplay" class="star-visual">★★★★★ (5.0)</span>
+                </div>
                 <div class="star-slider-wrap">
                   <input
                     type="range"
@@ -464,7 +487,7 @@
                     value="5.0"
                     oninput="updateAlbumStarDisplay(this.value)"
                   />
-                  <span id="albumStarDisplay" class="star-visual">★★★★★ (5.0)</span>
+                  <span class="range-sub-hint">Hassas yarım yıldız (0.5★) için kaydır</span>
                 </div>
               </div>
               <div class="like-picker-group">

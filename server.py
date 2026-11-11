@@ -43,7 +43,9 @@ load_env()
 # DATABASE INITIALIZATION & SEED DATA (SQLite)
 # ============================================================================
 def get_db():
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(DB_PATH), timeout=15.0)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout=10000;")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -1159,13 +1161,32 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
             username = body.get("username", "batin")
             tags_input = body.get("tags", "")
 
+            # Track metadata from client payload to guarantee zero 404s
+            title = body.get("title") or "Şarkı"
+            artist = body.get("artist") or "Sanatçı"
+            album = body.get("album") or "Single"
+            cover_url = body.get("cover_url") or ""
+            preview_url = body.get("preview_url") or ""
+            genre = body.get("genre") or "Music"
+            release_year = int(body.get("release_year") or 2024)
+
             conn = get_db()
             cur = conn.cursor()
+            # Ensure track exists in tracks table
+            cur.execute(
+                """
+                INSERT INTO tracks (id, title, artist, album, release_year, genre, cover_url, preview_url, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'user-reviewed')
+                ON CONFLICT(id) DO UPDATE SET
+                    cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE tracks.cover_url END,
+                    preview_url = CASE WHEN excluded.preview_url != '' THEN excluded.preview_url ELSE tracks.preview_url END
+                """,
+                (track_id, title, artist, album, release_year, genre, cover_url, preview_url),
+            )
             cur.execute("SELECT * FROM tracks WHERE id = ?", (track_id,))
-            track_row = cur.fetchone()
-            if not track_row:
-                conn.close()
-                return self._send_json({"error": "Track not found"}, 404)
+            track_row = dict(cur.fetchone())
+            conn.commit()
+            conn.close()
 
             # Tier 1 (Gemini Flash) automatically moderates and generates tags on review submission!
             flash_res = MultiModelRouter.route_task(
@@ -1180,6 +1201,8 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
             auto_tags = flash_res["result"].get("suggested_tags", [])
             final_tags = tags_input if tags_input else ",".join(auto_tags)
 
+            conn = get_db()
+            cur = conn.cursor()
             cur.execute(
                 """
                 INSERT INTO reviews (track_id, username, user_avatar, rating, liked, review_text, listen_date, tags, ai_moderated_by)
@@ -1199,7 +1222,7 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
             )
             conn.commit()
             conn.close()
-            return self._send_json({"ok": True, "ai_routing": flash_res})
+            return self._send_json({"ok": True, "ai_routing": flash_res, "message": "İnceleme başarıyla kaydedildi!"})
 
         if path == "/api/album/review":
             album_id = body.get("album_id")
@@ -1209,13 +1232,29 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
             listen_date = body.get("listen_date") or datetime.now().strftime("%Y-%m-%d")
             username = body.get("username", "batin")
 
+            title = body.get("title") or "Albüm"
+            artist = body.get("artist") or "Sanatçı"
+            genre = body.get("genre") or "Music"
+            cover_url = body.get("cover_url") or ""
+            release_year = int(body.get("release_year") or 2024)
+            track_count = int(body.get("track_count") or 10)
+
             conn = get_db()
             cur = conn.cursor()
+            # Ensure album exists
+            cur.execute(
+                """
+                INSERT INTO albums (id, title, artist, release_year, genre, track_count, cover_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE albums.cover_url END
+                """,
+                (album_id, title, artist, release_year, genre, track_count, cover_url),
+            )
             cur.execute("SELECT * FROM albums WHERE id = ?", (album_id,))
-            album_row = cur.fetchone()
-            if not album_row:
-                conn.close()
-                return self._send_json({"error": "Album not found"}, 404)
+            album_row = dict(cur.fetchone())
+            conn.commit()
+            conn.close()
 
             flash_res = MultiModelRouter.route_task(
                 "moderate_and_tag",
@@ -1227,6 +1266,8 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
                 },
             )
 
+            conn = get_db()
+            cur = conn.cursor()
             cur.execute(
                 """
                 INSERT INTO album_reviews (album_id, username, rating, liked, review_text, listen_date, ai_moderated_by)
@@ -1244,7 +1285,7 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
             )
             conn.commit()
             conn.close()
-            return self._send_json({"ok": True, "ai_routing": flash_res})
+            return self._send_json({"ok": True, "ai_routing": flash_res, "message": "Albüm incelemesi başarıyla kaydedildi!"})
 
         if path == "/api/listenlist/toggle":
             track_id = body.get("track_id")

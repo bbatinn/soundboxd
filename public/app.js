@@ -27,6 +27,34 @@ function formatStars(rating) {
   return "★".repeat(full) + half;
 }
 
+function showToast(message) {
+  const toast = document.getElementById("toastBanner");
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.remove("hidden");
+  toast.style.opacity = "1";
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    setTimeout(() => toast.classList.add("hidden"), 300);
+  }, 3200);
+}
+
+function setPickerRating(val) {
+  const input = document.getElementById("ratingRangeInput");
+  if (input) {
+    input.value = val;
+    updateStarDisplay(val);
+  }
+}
+
+function setAlbumPickerRating(val) {
+  const input = document.getElementById("albumRatingRange");
+  if (input) {
+    input.value = val;
+    updateAlbumStarDisplay(val);
+  }
+}
+
 function updateStarDisplay(val) {
   const disp = document.getElementById("starVisualDisplay");
   if (disp) {
@@ -589,9 +617,18 @@ async function submitReviewForm(e) {
   e.preventDefault();
   if (!appState.currentModalTrack) return;
 
+  const t = appState.currentModalTrack;
+  const ratingVal = parseFloat(document.getElementById("ratingRangeInput").value);
   const payload = {
-    track_id: appState.currentModalTrack.id,
-    rating: parseFloat(document.getElementById("ratingRangeInput").value),
+    track_id: t.id,
+    title: t.title || "Şarkı",
+    artist: t.artist || "Sanatçı",
+    album: t.album || "Single",
+    cover_url: t.cover_url || "",
+    preview_url: t.preview_url || "",
+    genre: t.genre || "Music",
+    release_year: t.release_year || 2024,
+    rating: ratingVal,
     liked: appState.currentLiked,
     review_text: document.getElementById("reviewTextInput").value.trim(),
     listen_date: document.getElementById("listenDateInput").value,
@@ -599,30 +636,36 @@ async function submitReviewForm(e) {
     username: "batin",
   };
 
-  if (appState.backendAvailable) {
-    const res = await fetch("/api/review", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) {
-      await loadBootstrap();
-      await openTrackModal(appState.currentModalTrack.id);
-      return;
+  try {
+    if (appState.backendAvailable) {
+      const res = await fetch("/api/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        showToast(`✓ "${t.title}" için ${ratingVal}★ puanınız günlüğe kaydedildi!`);
+        await loadBootstrap();
+        await openTrackModal(t.id);
+        return;
+      }
     }
+  } catch (err) {
+    console.warn("Backend error, falling back locally:", err);
   }
 
   // Fallback local save
   appState.reviews.unshift({
     id: Date.now(),
     ...payload,
-    track_title: appState.currentModalTrack.title,
-    track_artist: appState.currentModalTrack.artist,
-    track_cover: appState.currentModalTrack.cover_url,
-    release_year: appState.currentModalTrack.release_year,
+    track_title: t.title,
+    track_artist: t.artist,
+    track_cover: t.cover_url,
+    release_year: t.release_year,
     tags: payload.tags || "atmosferik,favori",
     ai_moderated_by: "Gemini 3.8 Flash",
   });
+  showToast(`✓ "${t.title}" için ${ratingVal}★ puanınız kaydedildi!`);
   renderAll();
   closeTrackModal();
 }
@@ -1036,23 +1079,36 @@ async function submitAlbumReviewForm(e) {
   e.preventDefault();
   if (!appState.currentModalAlbum) return;
 
+  const a = appState.currentModalAlbum;
+  const ratingVal = parseFloat(document.getElementById("albumRatingRange").value);
   const payload = {
-    album_id: appState.currentModalAlbum.id,
-    rating: parseFloat(document.getElementById("albumRatingRange").value),
+    album_id: a.id,
+    title: a.title || "Albüm",
+    artist: a.artist || "Sanatçı",
+    genre: a.genre || "Music",
+    cover_url: a.cover_url || "",
+    release_year: a.release_year || 2024,
+    track_count: a.track_count || 10,
+    rating: ratingVal,
     liked: appState.albumLiked,
     review_text: document.getElementById("albumReviewInput").value.trim(),
     listen_date: new Date().toISOString().slice(0, 10),
     username: "batin",
   };
 
-  if (appState.backendAvailable) {
-    await fetch("/api/album/review", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    await openAlbumModal(appState.currentModalAlbum.id);
-    await loadAlbums();
+  try {
+    if (appState.backendAvailable) {
+      await fetch("/api/album/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      showToast(`✓ "${a.title}" albümüne ${ratingVal}★ puanınız kaydedildi!`);
+      await openAlbumModal(a.id);
+      await loadAlbums();
+    }
+  } catch (err) {
+    console.error(err);
   }
 }
 
