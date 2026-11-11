@@ -20,6 +20,16 @@ let appState = {
 };
 
 // Format numeric rating (0.5 - 5.0) to Letterboxd stars "★★★★½"
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function formatStars(rating) {
   const num = parseFloat(rating) || 0;
   const full = Math.floor(num);
@@ -261,25 +271,25 @@ function renderRecentReviews() {
       const tags = (r.tags || "")
         .split(",")
         .filter(Boolean)
-        .map((tg) => `<span class="tag-chip">#${tg.trim()}</span>`)
+        .map((tg) => `<span class="tag-chip">#${escapeHtml(tg.trim())}</span>`)
         .join("");
       return `
       <div class="review-card">
-        <img class="review-card-cover" src="${r.track_cover}" alt="${r.track_title}" onclick="openTrackModal('${r.track_id}')" onerror="this.src='https://placehold.co/200x200/1b2228/00e054?text=♪'" />
+        <img class="review-card-cover" src="${r.track_cover}" alt="${escapeHtml(r.track_title)}" onclick="openTrackModal('${r.track_id}')" onerror="this.src='https://placehold.co/200x200/1b2228/00e054?text=♪'" />
         <div class="review-card-body">
           <div class="review-header">
             <span class="review-track-title" onclick="openTrackModal('${r.track_id}')">
-              ${r.track_title} <small style="color:var(--text-secondary);">(${r.track_artist})</small>
+              ${escapeHtml(r.track_title)} <small style="color:var(--text-secondary);">(${escapeHtml(r.track_artist)})</small>
             </span>
             <span>
               <span class="review-stars">${formatStars(r.rating)}</span>
               ${r.liked ? '<span class="review-heart">♥</span>' : ""}
             </span>
           </div>
-          <p class="review-text">${r.review_text || "<em>Sadece puan verildi.</em>"}</p>
+          <p class="review-text">${r.review_text ? escapeHtml(r.review_text) : "<em>Sadece puan verildi.</em>"}</p>
           <div class="review-footer">
             <div>${tags}</div>
-            <span>👤 @${r.username} • ⚡ ${r.ai_moderated_by || "Gemini Flash"}</span>
+            <span>👤 @${escapeHtml(r.username)} • ⚡ ${escapeHtml(r.ai_moderated_by || "Gemini Flash")}</span>
           </div>
         </div>
       </div>
@@ -296,26 +306,26 @@ function renderDiaryTable() {
       const tags = (r.tags || "")
         .split(",")
         .filter(Boolean)
-        .map((tg) => `<span class="tag-chip">#${tg.trim()}</span>`)
+        .map((tg) => `<span class="tag-chip">#${escapeHtml(tg.trim())}</span>`)
         .join("");
       return `
       <tr>
-        <td style="white-space:nowrap;color:var(--text-secondary);">${r.listen_date || "2026-11-11"}</td>
+        <td style="white-space:nowrap;color:var(--text-secondary);">${escapeHtml(r.listen_date || "2026-11-11")}</td>
         <td>
           <img class="diary-cover" src="${r.track_cover}" alt="" onclick="openTrackModal('${r.track_id}')" style="cursor:pointer;" />
         </td>
         <td>
-          <strong style="cursor:pointer;" onclick="openTrackModal('${r.track_id}')">${r.track_title}</strong><br/>
-          <span style="color:var(--text-secondary);font-size:0.78rem;">${r.track_artist}</span>
+          <strong style="cursor:pointer;" onclick="openTrackModal('${r.track_id}')">${escapeHtml(r.track_title)}</strong><br/>
+          <span style="color:var(--text-secondary);font-size:0.78rem;">${escapeHtml(r.track_artist)}</span>
         </td>
         <td>${r.release_year || ""}</td>
         <td><span class="review-stars">${formatStars(r.rating)}</span> <small>(${r.rating})</small></td>
         <td>${r.liked ? '<span class="review-heart">♥</span>' : "—"}</td>
         <td>
-          <div style="margin-bottom:4px;">${r.review_text || ""}</div>
+          <div style="margin-bottom:4px;">${escapeHtml(r.review_text || "")}</div>
           <div>${tags}</div>
         </td>
-        <td><span class="tag-chip" style="color:var(--lb-green);">${r.ai_moderated_by || "Gemini Flash"}</span></td>
+        <td><span class="tag-chip" style="color:var(--lb-green);">${escapeHtml(r.ai_moderated_by || "Gemini Flash")}</span></td>
       </tr>
     `;
     })
@@ -335,15 +345,15 @@ function renderCustomLists() {
     .map((lst) => {
       const strip = (lst.tracks || [])
         .slice(0, 5)
-        .map((t) => `<img src="${t.cover_url}" alt="${t.title}" title="${t.title} - ${t.artist}" onclick="openTrackModal('${t.id}')" style="cursor:pointer;" />`)
+        .map((t) => `<img src="${t.cover_url}" alt="${escapeHtml(t.title)}" title="${escapeHtml(t.title)} - ${escapeHtml(t.artist)}" onclick="openTrackModal('${t.id}')" style="cursor:pointer;" />`)
         .join("");
       return `
       <div class="list-card">
-        <h3>${lst.title}</h3>
-        <p style="font-size:0.83rem;color:var(--text-secondary);margin-top:4px;">${lst.description || ""}</p>
+        <h3>${escapeHtml(lst.title)}</h3>
+        <p style="font-size:0.83rem;color:var(--text-secondary);margin-top:4px;">${escapeHtml(lst.description || "")}</p>
         <div class="list-posters-strip">${strip}</div>
         <div style="font-size:0.74rem;color:var(--text-muted);">
-          Küratör: <strong>@${lst.created_by || "batin"}</strong> • ${(lst.tracks || []).length} şarkı
+          Küratör: <strong>@${escapeHtml(lst.created_by || "batin")}</strong> • ${(lst.tracks || []).length} şarkı
         </div>
       </div>
     `;
@@ -600,12 +610,12 @@ function renderModalReviews(track) {
       (r) => `
     <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:6px;padding:10px;">
       <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:4px;">
-        <strong>👤 @${r.username}</strong>
+        <strong>👤 @${escapeHtml(r.username)}</strong>
         <span class="review-stars">${formatStars(r.rating)} ${r.liked ? '<span class="review-heart">♥</span>' : ""}</span>
       </div>
-      <p style="font-size:0.85rem;color:#e2e8f0;">${r.review_text || ""}</p>
+      <p style="font-size:0.85rem;color:#e2e8f0;">${r.review_text ? escapeHtml(r.review_text) : ""}</p>
       <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">
-        📅 ${r.listen_date || ""} • ⚡ Denetim: ${r.ai_moderated_by || "Gemini 3.8 Flash"}
+        📅 ${escapeHtml(r.listen_date || "")} • ⚡ Denetim: ${escapeHtml(r.ai_moderated_by || "Gemini 3.8 Flash")}
       </div>
     </div>
   `
@@ -896,22 +906,22 @@ function renderAlbumsGrid(albums) {
       const avg = a.avg_rating && a.avg_rating > 0 ? `${a.avg_rating.toFixed(1)} ★` : "Yeni";
       return `
       <div class="track-card">
-        <div class="poster-wrap" onclick="openAlbumModal('${a.id}')">
-          <img src="${a.cover_url}" alt="${a.title}" loading="lazy" onerror="this.src='https://placehold.co/400x400/1b2228/00e054?text=Album'" />
+        <div class="poster-wrap" onclick="openAlbumModal('${escapeHtml(a.id)}')">
+          <img src="${a.cover_url}" alt="${escapeHtml(a.title)}" loading="lazy" onerror="this.src='https://placehold.co/400x400/1b2228/00e054?text=Album'" />
           <span class="rating-pill-corner">${avg}</span>
           <div class="poster-overlay">
             <div class="overlay-actions">
-              <button class="btn-overlay" onclick="event.stopPropagation(); openAlbumModal('${a.id}')">
+              <button class="btn-overlay" onclick="event.stopPropagation(); openAlbumModal('${escapeHtml(a.id)}')">
                 💿 Albümü İncele & Puanla
               </button>
             </div>
           </div>
         </div>
-        <div class="card-info" onclick="openAlbumModal('${a.id}')">
-          <div class="card-title" title="${a.title}"><strong>${a.title}</strong></div>
-          <div class="card-artist" title="${a.artist}">${a.artist}</div>
+        <div class="card-info" onclick="openAlbumModal('${escapeHtml(a.id)}')">
+          <div class="card-title" title="${escapeHtml(a.title)}"><strong>${escapeHtml(a.title)}</strong></div>
+          <div class="card-artist" title="${escapeHtml(a.artist)}">${escapeHtml(a.artist)}</div>
           <div class="card-meta-row">
-            <span>${a.release_year || ""} • ${a.track_count || 10} Şarkı</span>
+            <span>${escapeHtml(a.release_year || "")} • ${a.track_count || 10} Şarkı</span>
             <span>💬 ${a.review_count || 0}</span>
           </div>
         </div>
@@ -985,7 +995,7 @@ function renderAlbumTracklist(tracks) {
       <div class="album-track-row">
         <div class="album-track-left" onclick="quickPlayPreviewDirect('${t.preview_url}', '${t.title.replace(/'/g, "\\'")}', '${appState.currentModalAlbum.artist.replace(/'/g, "\\'")}', '${appState.currentModalAlbum.cover_url}')">
           <span class="album-track-num">${t.track_number}</span>
-          <strong>${t.title}</strong>
+          <strong>${escapeHtml(t.title)}</strong>
         </div>
         <div class="album-track-right">
           <span style="color:var(--text-muted);font-size:0.74rem;">${min}:${sec}</span>
@@ -1046,12 +1056,12 @@ function renderAlbumReviews(reviews) {
       (r) => `
     <div style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:6px;padding:10px;">
       <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:4px;">
-        <strong>👤 @${r.username}</strong>
+        <strong>👤 @${escapeHtml(r.username)}</strong>
         <span class="review-stars">${formatStars(r.rating)} ${r.liked ? '<span class="review-heart">♥</span>' : ""}</span>
       </div>
-      <p style="font-size:0.85rem;color:#e2e8f0;">${r.review_text || ""}</p>
+      <p style="font-size:0.85rem;color:#e2e8f0;">${r.review_text ? escapeHtml(r.review_text) : ""}</p>
       <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">
-        📅 ${r.listen_date || ""} • ⚡ Denetim: ${r.ai_moderated_by || "Gemini Flash"}
+        📅 ${escapeHtml(r.listen_date || "")} • ⚡ Denetim: ${escapeHtml(r.ai_moderated_by || "Gemini Flash")}
       </div>
     </div>
   `

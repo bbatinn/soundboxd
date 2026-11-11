@@ -12,6 +12,7 @@ Models Hierarchy (Token Conservation):
 
 import json
 import os
+import re
 import sqlite3
 import time
 import urllib.parse
@@ -43,9 +44,9 @@ load_env()
 # DATABASE INITIALIZATION & SEED DATA (SQLite)
 # ============================================================================
 def get_db():
-    conn = sqlite3.connect(str(DB_PATH), timeout=15.0)
+    conn = sqlite3.connect(str(DB_PATH), timeout=30.0)
     conn.execute("PRAGMA journal_mode=WAL;")
-    conn.execute("PRAGMA busy_timeout=10000;")
+    conn.execute("PRAGMA busy_timeout=30000;")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -124,6 +125,31 @@ def init_db():
             model_used TEXT NOT NULL,
             response_json TEXT NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS albums (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            artist TEXT NOT NULL,
+            release_year INTEGER,
+            genre TEXT,
+            track_count INTEGER DEFAULT 10,
+            cover_url TEXT,
+            external_url TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS album_reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            album_id TEXT NOT NULL,
+            username TEXT NOT NULL,
+            rating REAL NOT NULL,
+            liked INTEGER DEFAULT 0,
+            review_text TEXT,
+            listen_date TEXT,
+            ai_moderated_by TEXT DEFAULT 'gemini-flash',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(album_id) REFERENCES albums(id)
         );
         """
     )
@@ -371,6 +397,30 @@ def init_db():
             seed_tokens,
         )
 
+        seed_albums = [
+            ("album-daft-punk-discovery", "Discovery", "Daft Punk", 2001, "Electronic", 14,
+             "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/fd/4a/77/fd4a77db-0ebc-d043-41a2-f32fa1bb0fb4/dj.qrikkdwj.jpg/600x600bb.jpg", "697194953"),
+            ("album-radiohead-in-rainbows", "In Rainbows", "Radiohead", 2007, "Alternative", 10,
+             "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/dd/50/c7/dd50c790-99ac-d3d0-5ab8-e3891fb8fd52/634904032463.png/600x600bb.jpg", "1109714933"),
+            ("album-pink-floyd-dark-side", "The Dark Side of the Moon", "Pink Floyd", 1973, "Rock", 10,
+             "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/3e/76/b0/3e76b0e3-762b-2286-a019-8afb19cee541/886445635829.jpg/600x600bb.jpg", "1065973699"),
+            ("album-kendrick-tpab", "To Pimp a Butterfly", "Kendrick Lamar", 2015, "Hip-Hop/Rap", 16,
+             "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/b5/a6/91/b5a69171-5232-3d5b-9c15-8963802f83dd/15UMGIM15814.rgb.jpg/600x600bb.jpg", "1440871877"),
+            ("album-tame-impala-currents", "Currents", "Tame Impala", 2015, "Alternative", 13,
+             "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/a8/2e/b4/a82eb490-f30a-a321-461a-0383c88fec95/15UMGIM23316.rgb.jpg/600x600bb.jpg", "1440838039"),
+            ("album-frank-ocean-blonde", "Blonde", "Frank Ocean", 2016, "R&B/Soul", 15,
+             "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/cd/d3/d0/cdd3d00e-ec53-2e9f-81e2-774c07f5bea9/1827849271625.jpg/600x600bb.jpg", "1599412296"),
+            ("album-baris-manco-sozum", "Sözüm Meclisten Dışarı", "Barış Manço", 1981, "Rock", 16,
+             "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/96/b5/6f/96b56f34-4bb9-3aa5-add2-5a2504e74562/cover.jpg/600x600bb.jpg", "590644563")
+        ]
+        cur.executemany(
+            """
+            INSERT OR IGNORE INTO albums (id, title, artist, release_year, genre, track_count, cover_url, external_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            seed_albums
+        )
+
     conn.commit()
     conn.close()
 
@@ -382,13 +432,9 @@ def init_db():
 def search_music_catalog(query: str, limit: int = 12):
     """
     Fetches official song metadata, album art (600x600), and legal 30-second audio previews
-    from Apple iTunes Search API (zero-config, legal metadata) and merges with local DB ratings.
+    from Apple iTunes Search API and merges with local DB ratings in a safe, isolated transaction.
     """
     results = []
-    conn = get_db()
-    cur = conn.cursor()
-
-    # 1. Try live iTunes Search API first
     try:
         encoded = urllib.parse.quote(query)
         url = f"https://itunes.apple.com/search?term={encoded}&entity=song&limit={limit}"
@@ -415,137 +461,143 @@ def search_music_catalog(query: str, limit: int = 12):
                     "external_url": item.get("trackViewUrl", ""),
                     "source": "itunes-api",
                 }
-
-                # Upsert into local tracks table so users can immediately rate/review it
-                cur.execute(
-                    """
-                    INSERT INTO tracks (id, title, artist, album, release_year, genre, duration_sec, cover_url, preview_url, external_url, source)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        preview_url = CASE WHEN excluded.preview_url != '' THEN excluded.preview_url ELSE tracks.preview_url END,
-                        cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE tracks.cover_url END
-                    """,
-                    (
-                        track_obj["id"],
-                        track_obj["title"],
-                        track_obj["artist"],
-                        track_obj["album"],
-                        track_obj["release_year"],
-                        track_obj["genre"],
-                        track_obj["duration_sec"],
-                        track_obj["cover_url"],
-                        track_obj["preview_url"],
-                        track_obj["external_url"],
-                        track_obj["source"],
-                    ),
-                )
                 results.append(track_obj)
-        conn.commit()
     except Exception:
         pass
 
-    # 2. Also search local DB tracks matching query
-    q_like = f"%{query}%"
-    cur.execute(
-        """
-        SELECT * FROM tracks
-        WHERE title LIKE ? OR artist LIKE ? OR album LIKE ? OR genre LIKE ?
-        LIMIT ?
-        """,
-        (q_like, q_like, q_like, q_like, limit),
-    )
-    local_rows = [dict(r) for r in cur.fetchall()]
-    seen_ids = {r["id"] for r in results}
-    for row in local_rows:
-        if row["id"] not in seen_ids:
-            results.insert(0, row)
-            seen_ids.add(row["id"])
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        for track_obj in results:
+            cur.execute(
+                """
+                INSERT INTO tracks (id, title, artist, album, release_year, genre, duration_sec, cover_url, preview_url, external_url, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    preview_url = CASE WHEN excluded.preview_url != '' THEN excluded.preview_url ELSE tracks.preview_url END,
+                    cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE tracks.cover_url END
+                """,
+                (
+                    track_obj["id"],
+                    track_obj["title"],
+                    track_obj["artist"],
+                    track_obj["album"],
+                    track_obj["release_year"],
+                    track_obj["genre"],
+                    track_obj["duration_sec"],
+                    track_obj["cover_url"],
+                    track_obj["preview_url"],
+                    track_obj["external_url"],
+                    track_obj["source"],
+                ),
+            )
+        conn.commit()
 
-    conn.close()
+        q_like = f"%{query}%"
+        cur.execute(
+            """
+            SELECT * FROM tracks
+            WHERE title LIKE ? OR artist LIKE ? OR album LIKE ? OR genre LIKE ?
+            LIMIT ?
+            """,
+            (q_like, q_like, q_like, q_like, limit),
+        )
+        local_rows = [dict(r) for r in cur.fetchall()]
+        seen_ids = {r["id"] for r in results}
+        for row in local_rows:
+            if row["id"] not in seen_ids:
+                results.insert(0, row)
+                seen_ids.add(row["id"])
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
     return enrich_tracks_with_stats(results[:limit])
 
 
 def enrich_tracks_with_stats(tracks):
     conn = get_db()
-    cur = conn.cursor()
-    enriched = []
-    for t in tracks:
-        tid = t["id"]
-        cur.execute(
-            """
-            SELECT COUNT(*) as review_count,
-                   ROUND(AVG(rating), 2) as avg_rating,
-                   SUM(liked) as likes_count
-            FROM reviews WHERE track_id = ?
-            """,
-            (tid,),
-        )
-        stat = cur.fetchone()
-        # Histogram distribution (0.5 to 5.0)
-        cur.execute(
-            "SELECT rating, COUNT(*) as cnt FROM reviews WHERE track_id = ? GROUP BY rating",
-            (tid,),
-        )
-        hist = {str(float(i) / 2): 0 for i in range(1, 11)}
-        for r in cur.fetchall():
-            key = str(float(r["rating"]))
-            if key in hist:
-                hist[key] = r["cnt"]
+    try:
+        cur = conn.cursor()
+        enriched = []
+        for t in tracks:
+            tid = t["id"]
+            cur.execute(
+                """
+                SELECT COUNT(*) as review_count,
+                       ROUND(AVG(rating), 2) as avg_rating,
+                       SUM(liked) as likes_count
+                FROM reviews WHERE track_id = ?
+                """,
+                (tid,),
+            )
+            stat = cur.fetchone()
+            cur.execute(
+                "SELECT rating, COUNT(*) as cnt FROM reviews WHERE track_id = ? GROUP BY rating",
+                (tid,),
+            )
+            hist = {str(float(i) / 2): 0 for i in range(1, 11)}
+            for r in cur.fetchall():
+                key = str(float(r["rating"]))
+                if key in hist:
+                    hist[key] = r["cnt"]
 
-        cur.execute("SELECT 1 FROM listenlist WHERE track_id = ?", (tid,))
-        in_listenlist = cur.fetchone() is not None
+            cur.execute("SELECT 1 FROM listenlist WHERE track_id = ?", (tid,))
+            in_listenlist = cur.fetchone() is not None
 
-        t_copy = dict(t)
-        t_copy["review_count"] = stat["review_count"] or 0
-        t_copy["avg_rating"] = stat["avg_rating"] if stat["avg_rating"] is not None else 0.0
-        t_copy["likes_count"] = stat["likes_count"] or 0
-        t_copy["histogram"] = hist
-        t_copy["in_listenlist"] = in_listenlist
-        enriched.append(t_copy)
-    conn.close()
-    return enriched
+            t_copy = dict(t)
+            t_copy["review_count"] = stat["review_count"] or 0
+            t_copy["avg_rating"] = stat["avg_rating"] if stat["avg_rating"] is not None else 0.0
+            t_copy["likes_count"] = stat["likes_count"] or 0
+            t_copy["histogram"] = hist
+            t_copy["in_listenlist"] = in_listenlist
+            enriched.append(t_copy)
+        return enriched
+    finally:
+        conn.close()
 
 
 def enrich_albums_with_stats(albums):
     conn = get_db()
-    cur = conn.cursor()
-    enriched = []
-    for a in albums:
-        aid = a["id"]
-        cur.execute(
-            """
-            SELECT COUNT(*) as review_count,
-                   ROUND(AVG(rating), 2) as avg_rating,
-                   SUM(liked) as likes_count
-            FROM album_reviews WHERE album_id = ?
-            """,
-            (aid,),
-        )
-        stat = cur.fetchone()
-        cur.execute(
-            "SELECT rating, COUNT(*) as cnt FROM album_reviews WHERE album_id = ? GROUP BY rating",
-            (aid,),
-        )
-        hist = {str(float(i) / 2): 0 for i in range(1, 11)}
-        for r in cur.fetchall():
-            key = str(float(r["rating"]))
-            if key in hist:
-                hist[key] = r["cnt"]
+    try:
+        cur = conn.cursor()
+        enriched = []
+        for a in albums:
+            aid = a["id"]
+            cur.execute(
+                """
+                SELECT COUNT(*) as review_count,
+                       ROUND(AVG(rating), 2) as avg_rating,
+                       SUM(liked) as likes_count
+                FROM album_reviews WHERE album_id = ?
+                """,
+                (aid,),
+            )
+            stat = cur.fetchone()
+            cur.execute(
+                "SELECT rating, COUNT(*) as cnt FROM album_reviews WHERE album_id = ? GROUP BY rating",
+                (aid,),
+            )
+            hist = {str(float(i) / 2): 0 for i in range(1, 11)}
+            for r in cur.fetchall():
+                key = str(float(r["rating"]))
+                if key in hist:
+                    hist[key] = r["cnt"]
 
-        a_copy = dict(a)
-        a_copy["review_count"] = stat["review_count"] or 0
-        a_copy["avg_rating"] = stat["avg_rating"] if stat["avg_rating"] is not None else 0.0
-        a_copy["likes_count"] = stat["likes_count"] or 0
-        a_copy["histogram"] = hist
-        enriched.append(a_copy)
-    conn.close()
-    return enriched
+            a_copy = dict(a)
+            a_copy["review_count"] = stat["review_count"] or 0
+            a_copy["avg_rating"] = stat["avg_rating"] if stat["avg_rating"] is not None else 0.0
+            a_copy["likes_count"] = stat["likes_count"] or 0
+            a_copy["histogram"] = hist
+            enriched.append(a_copy)
+        return enriched
+    finally:
+        conn.close()
 
 
 def search_albums_catalog(query: str, limit: int = 12):
     results = []
-    conn = get_db()
-    cur = conn.cursor()
     try:
         encoded = urllib.parse.quote(query)
         url = f"https://itunes.apple.com/search?term={encoded}&entity=album&limit={limit}"
@@ -570,55 +622,68 @@ def search_albums_catalog(query: str, limit: int = 12):
                     "cover_url": artwork,
                     "external_url": col_id,
                 }
-                cur.execute(
-                    """
-                    INSERT INTO albums (id, title, artist, release_year, genre, track_count, cover_url, external_url)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE albums.cover_url END
-                    """,
-                    (
-                        album_obj["id"],
-                        album_obj["title"],
-                        album_obj["artist"],
-                        album_obj["release_year"],
-                        album_obj["genre"],
-                        album_obj["track_count"],
-                        album_obj["cover_url"],
-                        album_obj["external_url"],
-                    ),
-                )
                 results.append(album_obj)
-        conn.commit()
     except Exception:
         pass
 
-    q_like = f"%{query}%"
-    cur.execute(
-        """
-        SELECT * FROM albums
-        WHERE title LIKE ? OR artist LIKE ? OR genre LIKE ?
-        LIMIT ?
-        """,
-        (q_like, q_like, q_like, limit),
-    )
-    local_rows = [dict(r) for r in cur.fetchall()]
-    seen_ids = {r["id"] for r in results}
-    for row in local_rows:
-        if row["id"] not in seen_ids:
-            results.insert(0, row)
-            seen_ids.add(row["id"])
-    conn.close()
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        for album_obj in results:
+            cur.execute(
+                """
+                INSERT INTO albums (id, title, artist, release_year, genre, track_count, cover_url, external_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE albums.cover_url END
+                """,
+                (
+                    album_obj["id"],
+                    album_obj["title"],
+                    album_obj["artist"],
+                    album_obj["release_year"],
+                    album_obj["genre"],
+                    album_obj["track_count"],
+                    album_obj["cover_url"],
+                    album_obj["external_url"],
+                ),
+            )
+        conn.commit()
+
+        q_like = f"%{query}%"
+        cur.execute(
+            """
+            SELECT * FROM albums
+            WHERE title LIKE ? OR artist LIKE ? OR genre LIKE ?
+            LIMIT ?
+            """,
+            (q_like, q_like, q_like, limit),
+        )
+        local_rows = [dict(r) for r in cur.fetchall()]
+        seen_ids = {r["id"] for r in results}
+        for row in local_rows:
+            if row["id"] not in seen_ids:
+                results.insert(0, row)
+                seen_ids.add(row["id"])
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
     return enrich_albums_with_stats(results[:limit])
 
 
 def get_album_with_tracklist(album_id: str):
     conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM albums WHERE id = ?", (album_id,))
-    row = cur.fetchone()
-    if not row:
+    row = None
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM albums WHERE id = ?", (album_id,))
+        row = cur.fetchone()
+    finally:
         conn.close()
+
+    if not row:
         return None
 
     album = enrich_albums_with_stats([dict(row)])[0]
@@ -651,20 +716,53 @@ def get_album_with_tracklist(album_id: str):
         except Exception:
             pass
 
-    # Check local ratings for each track in this album
-    for t in tracks:
-        cur.execute("SELECT ROUND(AVG(rating), 1) as r FROM reviews WHERE track_id = ?", (t["id"],))
-        st = cur.fetchone()
-        t["rating"] = st["r"] if st and st["r"] is not None else None
+    conn = get_db()
+    try:
+        cur = conn.cursor()
+        # Fetch all track reviews for this artist to match seed & itunes track variants
+        cur.execute(
+            """
+            SELECT r.rating, tr.title as track_title, r.track_id
+            FROM reviews r
+            LEFT JOIN tracks tr ON tr.id = r.track_id
+            WHERE LOWER(tr.artist) LIKE '%' || LOWER(?) || '%' OR LOWER(?) LIKE '%' || LOWER(tr.artist) || '%'
+            """,
+            (album["artist"], album["artist"]),
+        )
+        artist_reviews = [dict(r) for r in cur.fetchall()]
 
-    # Calculate average track rating across reviewed songs in the album
-    rated_scores = [t["rating"] for t in tracks if t["rating"] is not None]
-    album["avg_track_score"] = round(sum(rated_scores) / len(rated_scores), 2) if rated_scores else None
+        def clean_title(s):
+            if not s:
+                return ""
+            s = re.sub(r"\(.*?\)|\[.*?\]", "", s)
+            return re.sub(r"[^a-zA-Z0-9çğıöşüÇĞİÖŞÜ]", "", s).lower()
 
-    cur.execute("SELECT * FROM album_reviews WHERE album_id = ? ORDER BY id DESC", (album_id,))
-    album["reviews"] = [dict(r) for r in cur.fetchall()]
-    album["tracks"] = tracks
-    conn.close()
+        # Check local ratings for each track in this album with fuzzy cleaned title matching
+        for t in tracks:
+            c_track = clean_title(t["title"])
+            matched_ratings = []
+            for rev in artist_reviews:
+                rev_tid = rev.get("track_id")
+                rev_title = rev.get("track_title") or ""
+                c_rev = clean_title(rev_title)
+                if rev_tid == t["id"] or (c_track and c_rev and (c_track == c_rev or c_track in c_rev or c_rev in c_track)):
+                    if rev.get("rating") is not None:
+                        matched_ratings.append(rev["rating"])
+            if matched_ratings:
+                t["rating"] = round(sum(matched_ratings) / len(matched_ratings), 1)
+            else:
+                t["rating"] = None
+
+        # Calculate average track rating across reviewed songs in the album
+        rated_scores = [t["rating"] for t in tracks if t["rating"] is not None]
+        album["avg_track_score"] = round(sum(rated_scores) / len(rated_scores), 2) if rated_scores else None
+
+        cur.execute("SELECT * FROM album_reviews WHERE album_id = ? ORDER BY id DESC", (album_id,))
+        album["reviews"] = [dict(r) for r in cur.fetchall()]
+        album["tracks"] = tracks
+    finally:
+        conn.close()
+
     return album
 
 
@@ -738,11 +836,15 @@ class MultiModelRouter:
         # Check cache first to protect Argon & Claude tokens!
         cache_key = f"{selected_key}:{task_type}:{json.dumps(payload, sort_keys=True, ensure_ascii=False)}"
         conn = get_db()
-        cur = conn.cursor()
-        cur.execute("SELECT response_json FROM ai_cache WHERE cache_key = ?", (cache_key,))
-        cached_row = cur.fetchone()
-        if cached_row:
+        cached_row = None
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT response_json FROM ai_cache WHERE cache_key = ?", (cache_key,))
+            cached_row = cur.fetchone()
+        finally:
             conn.close()
+
+        if cached_row:
             res = json.loads(cached_row["response_json"])
             res["cached"] = True
             res["token_note"] = "Önbellekten (Cache) getirildi — 0 yeni token harcandı!"
@@ -753,21 +855,6 @@ class MultiModelRouter:
 
         # Calculate how many Argon-equivalent tokens were saved by NOT using Argon for Tier 1/2/3 tasks
         saved_argon = (p_tokens + c_tokens) if selected_key != "argon" else 0
-
-        cur.execute(
-            """
-            INSERT INTO token_usage_log (model_tier, model_name, task_type, prompt_tokens, completion_tokens, saved_argon_tokens, cached)
-            VALUES (?, ?, ?, ?, ?, ?, 0)
-            """,
-            (
-                model_info["tier"],
-                model_info["name"],
-                task_type,
-                p_tokens,
-                c_tokens,
-                saved_argon,
-            ),
-        )
 
         response_obj = {
             "model_key": selected_key,
@@ -786,12 +873,31 @@ class MultiModelRouter:
             "cached": False,
         }
 
-        cur.execute(
-            "INSERT OR REPLACE INTO ai_cache (cache_key, model_used, response_json) VALUES (?, ?, ?)",
-            (cache_key, model_info["name"], json.dumps(response_obj, ensure_ascii=False)),
-        )
-        conn.commit()
-        conn.close()
+        conn = get_db()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO token_usage_log (model_tier, model_name, task_type, prompt_tokens, completion_tokens, saved_argon_tokens, cached)
+                VALUES (?, ?, ?, ?, ?, ?, 0)
+                """,
+                (
+                    model_info["tier"],
+                    model_info["name"],
+                    task_type,
+                    p_tokens,
+                    c_tokens,
+                    saved_argon,
+                ),
+            )
+            cur.execute(
+                "INSERT OR REPLACE INTO ai_cache (cache_key, model_used, response_json) VALUES (?, ?, ?)",
+                (cache_key, model_info["name"], json.dumps(response_obj, ensure_ascii=False)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
         return response_obj
 
     @classmethod
@@ -904,16 +1010,51 @@ class MultiModelRouter:
             )
 
         if selected_key == "pro":
-            # Tier 2: Gemini Pro technical & similarity matching
+            # Tier 2: Gemini Pro technical & similarity matching (dynamic genre & acoustic aware)
+            g_lower = (genre or "").lower()
+            a_lower = (artist or "").lower()
+            if "rock" in g_lower or "metal" in g_lower:
+                if any(k in a_lower for k in ["duman", "mor ve ötesi", "manga", "şebnem", "teoman"]):
+                    recs = [
+                        "Mor ve Ötesi — Cambaz (Dinamik distorsiyon ve vokal enerjisi)",
+                        "Kurban — Yalan (Ritmik yürüyüş ve alternatif Türk rock tavrı)",
+                        "Mavi Sakal — İki Yol (90'lar Anadolu grunge atmosferi)",
+                    ]
+                else:
+                    recs = [
+                        "Arctic Monkeys — 505 (Benzer karanlık gitar riff'leri ve yükselen tansiyon)",
+                        "The Strokes — Reptilia (Hızlı ritmik bateri ve melodik garage rock)",
+                        "Radiohead — 2 + 2 = 5 (Dinamik patlamalar ve deneysel rock yapısı)",
+                    ]
+            elif "rap" in g_lower or "hip" in g_lower:
+                recs = [
+                    "Nas — N.Y. State of Mind (Lirik derinlik ve klasik boom-bap ritim)",
+                    "J. Cole — Middle Child (Kişisel hikaye anlatımı ve sıcak brass örnekleri)",
+                    "A Tribe Called Quest — Electric Relaxation (Caz tınılı organik groove)",
+                ]
+            elif "electronic" in g_lower or "house" in g_lower or "synth" in g_lower:
+                recs = [
+                    "Justice — Genesis (Analog synth patlamaları ve Fransız electro dokusu)",
+                    "Kavinsky — Nightcall (Sinematik retro-wave atmosfer)",
+                    "LCD Soundsystem — Someone Great (Elektronik katmanların melodik hüznü)",
+                ]
+            elif "r&b" in g_lower or "soul" in g_lower:
+                recs = [
+                    "Steve Lacy — Bad Habit (Lo-fi gitar groove'u ve içten vokal)",
+                    "Daniel Caesar — Japanese Denim (Sıcak analog R&B armonisi)",
+                    "Blood Orange — Charcoal Baby (Yumuşak synth dokuları ve melankoli)",
+                ]
+            else:
+                recs = [
+                    "Portishead — Glory Box (Hipnotize edici trip-hop yaylıları ve derin atmosfer)",
+                    "The Smile — Pana-vision (Karmaşık zaman ölçüleri ve piyano armonisi)",
+                    "Altın Gün — Süpürgesi Yoncadan (Organik ritim ve psychedelic akış)",
+                ]
             return (
                 {
                     "analysis_title": f"Gemini Pro — '{track}' Akustik & Benzerlik Analizi",
                     "sonic_signature": f"{artist} bu parçada {genre} dokularını dinamik frekans geçişleriyle birleştiriyor.",
-                    "recommendations": [
-                        f"Air — La Femme d'Argent (Benzer atmosferik derinlik ve bas yürüyüşü)",
-                        f"Khruangbin — Time (You and I) (Groove ve organik enstrümantasyon uyumu)",
-                        f"Massive Attack — Teardrop (Karanlık ama hipnotize edici ritmik kurgu)",
-                    ],
+                    "recommendations": recs,
                 },
                 310,
                 145,
@@ -941,17 +1082,20 @@ class MultiModelRouter:
         # Tier 4: Gemini 4 Argon (MOST VALUABLE — Deep Musical DNA Synthesis)
         # Pre-aggregated from Flash + Pro + Claude outputs to minimize Argon prompt size!
         conn = get_db()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT t.title, t.artist, t.genre, t.release_year, r.rating, r.tags
-            FROM reviews r
-            JOIN tracks t ON t.id = r.track_id
-            ORDER BY r.rating DESC LIMIT 10
-            """
-        )
-        top_rated = [dict(r) for r in cur.fetchall()]
-        conn.close()
+        top_rated = []
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT t.title, t.artist, t.genre, t.release_year, r.rating, r.tags
+                FROM reviews r
+                JOIN tracks t ON t.id = r.track_id
+                ORDER BY r.rating DESC LIMIT 10
+                """
+            )
+            top_rated = [dict(r) for r in cur.fetchall()]
+        finally:
+            conn.close()
 
         artists_str = ", ".join(list({r["artist"] for r in top_rated[:5]})) or "Daft Punk, Radiohead, Barış Manço"
         return (
@@ -1010,332 +1154,402 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        path = parsed.path
-        qs = urllib.parse.parse_qs(parsed.query)
+        try:
+            parsed = urllib.parse.urlparse(self.path)
+            path = parsed.path
+            qs = urllib.parse.parse_qs(parsed.query)
 
-        if path == "/api/bootstrap":
-            conn = get_db()
-            cur = conn.cursor()
+            if path == "/api/bootstrap":
+                conn = get_db()
+                try:
+                    cur = conn.cursor()
+                    cur.execute("SELECT * FROM tracks ORDER BY created_at DESC LIMIT 24")
+                    tracks = enrich_tracks_with_stats([dict(r) for r in cur.fetchall()])
 
-            cur.execute("SELECT * FROM tracks ORDER BY created_at DESC LIMIT 24")
-            tracks = enrich_tracks_with_stats([dict(r) for r in cur.fetchall()])
+                    cur.execute(
+                        """
+                        SELECT r.*, t.title as track_title, t.artist as track_artist,
+                               t.cover_url as track_cover, t.release_year, t.album
+                        FROM reviews r
+                        JOIN tracks t ON t.id = r.track_id
+                        ORDER BY r.id DESC LIMIT 30
+                        """
+                    )
+                    reviews = [dict(r) for r in cur.fetchall()]
 
-            cur.execute(
-                """
-                SELECT r.*, t.title as track_title, t.artist as track_artist,
-                       t.cover_url as track_cover, t.release_year, t.album
-                FROM reviews r
-                JOIN tracks t ON t.id = r.track_id
-                ORDER BY r.id DESC LIMIT 30
-                """
-            )
-            reviews = [dict(r) for r in cur.fetchall()]
+                    cur.execute(
+                        """
+                        SELECT f.slot, t.*
+                        FROM favorites f
+                        JOIN tracks t ON t.id = f.track_id
+                        ORDER BY f.slot ASC
+                        """
+                    )
+                    favorites = enrich_tracks_with_stats([dict(r) for r in cur.fetchall()])
 
-            cur.execute(
-                """
-                SELECT f.slot, t.*
-                FROM favorites f
-                JOIN tracks t ON t.id = f.track_id
-                ORDER BY f.slot ASC
-                """
-            )
-            favorites = enrich_tracks_with_stats([dict(r) for r in cur.fetchall()])
+                    cur.execute(
+                        """
+                        SELECT t.*
+                        FROM listenlist l
+                        JOIN tracks t ON t.id = l.track_id
+                        ORDER BY l.added_at DESC
+                        """
+                    )
+                    listenlist = enrich_tracks_with_stats([dict(r) for r in cur.fetchall()])
 
-            cur.execute(
-                """
-                SELECT t.*
-                FROM listenlist l
-                JOIN tracks t ON t.id = l.track_id
-                ORDER BY l.added_at DESC
-                """
-            )
-            listenlist = enrich_tracks_with_stats([dict(r) for r in cur.fetchall()])
+                    cur.execute("SELECT * FROM custom_lists ORDER BY id DESC")
+                    lists_raw = [dict(r) for r in cur.fetchall()]
+                    custom_lists = []
+                    for lst in lists_raw:
+                        tids = json.loads(lst["track_ids"])
+                        if tids:
+                            placeholders = ",".join("?" for _ in tids)
+                            cur.execute(f"SELECT * FROM tracks WHERE id IN ({placeholders})", tids)
+                            lst_tracks = enrich_tracks_with_stats([dict(r) for r in cur.fetchall()])
+                        else:
+                            lst_tracks = []
+                        lst["tracks"] = lst_tracks
+                        custom_lists.append(lst)
 
-            cur.execute("SELECT * FROM custom_lists ORDER BY id DESC")
-            lists_raw = [dict(r) for r in cur.fetchall()]
-            custom_lists = []
-            for lst in lists_raw:
-                tids = json.loads(lst["track_ids"])
-                if tids:
-                    placeholders = ",".join("?" for _ in tids)
-                    cur.execute(f"SELECT * FROM tracks WHERE id IN ({placeholders})", tids)
-                    lst_tracks = enrich_tracks_with_stats([dict(r) for r in cur.fetchall()])
-                else:
-                    lst_tracks = []
-                lst["tracks"] = lst_tracks
-                custom_lists.append(lst)
+                    # Token router telemetry summary
+                    cur.execute(
+                        """
+                        SELECT model_tier, model_name,
+                               COUNT(*) as calls,
+                               SUM(prompt_tokens + completion_tokens) as total_tokens,
+                               SUM(saved_argon_tokens) as saved_argon
+                        FROM token_usage_log
+                        GROUP BY model_name
+                        ORDER BY model_tier ASC
+                        """
+                    )
+                    token_summary = [dict(r) for r in cur.fetchall()]
 
-            # Token router telemetry summary
-            cur.execute(
-                """
-                SELECT model_tier, model_name,
-                       COUNT(*) as calls,
-                       SUM(prompt_tokens + completion_tokens) as total_tokens,
-                       SUM(saved_argon_tokens) as saved_argon
-                FROM token_usage_log
-                GROUP BY model_name
-                ORDER BY model_tier ASC
-                """
-            )
-            token_summary = [dict(r) for r in cur.fetchall()]
+                    cur.execute("SELECT * FROM token_usage_log ORDER BY id DESC LIMIT 12")
+                    recent_token_logs = [dict(r) for r in cur.fetchall()]
+                finally:
+                    conn.close()
 
-            cur.execute("SELECT * FROM token_usage_log ORDER BY id DESC LIMIT 12")
-            recent_token_logs = [dict(r) for r in cur.fetchall()]
+                return self._send_json(
+                    {
+                        "tracks": tracks,
+                        "reviews": reviews,
+                        "favorites": favorites,
+                        "listenlist": listenlist,
+                        "custom_lists": custom_lists,
+                        "token_summary": token_summary,
+                        "recent_token_logs": recent_token_logs,
+                        "models_hierarchy": list(MultiModelRouter.MODELS.values()),
+                    }
+                )
 
-            conn.close()
-            return self._send_json(
-                {
-                    "tracks": tracks,
-                    "reviews": reviews,
-                    "favorites": favorites,
-                    "listenlist": listenlist,
-                    "custom_lists": custom_lists,
-                    "token_summary": token_summary,
-                    "recent_token_logs": recent_token_logs,
-                    "models_hierarchy": list(MultiModelRouter.MODELS.values()),
-                }
-            )
+            if path == "/api/search":
+                q = qs.get("q", [""])[0].strip()
+                if not q:
+                    return self._send_json({"results": []})
+                results = search_music_catalog(q, limit=12)
+                return self._send_json({"results": results})
 
-        if path == "/api/search":
-            q = qs.get("q", [""])[0].strip()
-            if not q:
-                return self._send_json({"results": []})
-            results = search_music_catalog(q, limit=12)
-            return self._send_json({"results": results})
+            if path == "/api/track":
+                tid = qs.get("id", [""])[0].strip()
+                conn = get_db()
+                row = None
+                revs = []
+                try:
+                    cur = conn.cursor()
+                    cur.execute("SELECT * FROM tracks WHERE id = ?", (tid,))
+                    row = cur.fetchone()
+                    if row:
+                        cur.execute(
+                            "SELECT * FROM reviews WHERE track_id = ? ORDER BY id DESC",
+                            (tid,),
+                        )
+                        revs = [dict(r) for r in cur.fetchall()]
+                finally:
+                    conn.close()
 
-        if path == "/api/track":
-            tid = qs.get("id", [""])[0].strip()
-            conn = get_db()
-            cur = conn.cursor()
-            cur.execute("SELECT * FROM tracks WHERE id = ?", (tid,))
-            row = cur.fetchone()
-            if not row:
-                conn.close()
-                return self._send_json({"error": "Şarkı bulunamadı"}, 404)
-            track = enrich_tracks_with_stats([dict(row)])[0]
-            cur.execute(
-                "SELECT * FROM reviews WHERE track_id = ? ORDER BY id DESC",
-                (tid,),
-            )
-            track["reviews"] = [dict(r) for r in cur.fetchall()]
-            conn.close()
-            return self._send_json(track)
+                if not row:
+                    return self._send_json({"error": "Şarkı bulunamadı"}, 404)
+                track = enrich_tracks_with_stats([dict(row)])[0]
+                track["reviews"] = revs
+                return self._send_json(track)
 
-        if path == "/api/albums":
-            conn = get_db()
-            cur = conn.cursor()
-            cur.execute("SELECT * FROM albums ORDER BY release_year DESC LIMIT 30")
-            albums = enrich_albums_with_stats([dict(r) for r in cur.fetchall()])
-            conn.close()
-            return self._send_json({"albums": albums})
+            if path == "/api/albums":
+                conn = get_db()
+                albums = []
+                try:
+                    cur = conn.cursor()
+                    cur.execute("SELECT * FROM albums ORDER BY release_year DESC LIMIT 30")
+                    albums = enrich_albums_with_stats([dict(r) for r in cur.fetchall()])
+                finally:
+                    conn.close()
+                return self._send_json({"albums": albums})
 
-        if path == "/api/album":
-            aid = qs.get("id", [""])[0].strip()
-            album_data = get_album_with_tracklist(aid)
-            if not album_data:
-                return self._send_json({"error": "Albüm bulunamadı"}, 404)
-            return self._send_json(album_data)
+            if path == "/api/album":
+                aid = qs.get("id", [""])[0].strip()
+                album_data = get_album_with_tracklist(aid)
+                if not album_data:
+                    return self._send_json({"error": "Albüm bulunamadı"}, 404)
+                return self._send_json(album_data)
 
-        if path == "/api/albums/search":
-            q = qs.get("q", [""])[0].strip()
-            if not q:
-                return self._send_json({"results": []})
-            results = search_albums_catalog(q, limit=12)
-            return self._send_json({"results": results})
+            if path == "/api/albums/search":
+                q = qs.get("q", [""])[0].strip()
+                if not q:
+                    return self._send_json({"results": []})
+                results = search_albums_catalog(q, limit=12)
+                return self._send_json({"results": results})
 
-        return super().do_GET()
+            return super().do_GET()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return self._send_json({"error": str(e)}, 500)
 
     def do_POST(self):
-        parsed = urllib.parse.urlparse(self.path)
-        path = parsed.path
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
+        try:
+            parsed = urllib.parse.urlparse(self.path)
+            path = parsed.path
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
 
-        if path == "/api/review":
-            track_id = body.get("track_id")
-            rating = float(body.get("rating", 4.0))
-            liked = 1 if body.get("liked") else 0
-            review_text = body.get("review_text", "").strip()
-            listen_date = body.get("listen_date") or datetime.now().strftime("%Y-%m-%d")
-            username = body.get("username", "batin")
-            tags_input = body.get("tags", "")
+            if path == "/api/review":
+                track_id = body.get("track_id")
+                if not track_id or not str(track_id).strip():
+                    return self._send_json({"error": "track_id gerekli"}, 400)
+                try:
+                    rating = float(body.get("rating", 4.0))
+                    if not (0.5 <= rating <= 5.0):
+                        return self._send_json({"error": "Puan 0.5 ile 5.0 arasında olmalı"}, 400)
+                except (TypeError, ValueError):
+                    return self._send_json({"error": "Geçersiz puan formatı"}, 400)
 
-            # Track metadata from client payload to guarantee zero 404s
-            title = body.get("title") or "Şarkı"
-            artist = body.get("artist") or "Sanatçı"
-            album = body.get("album") or "Single"
-            cover_url = body.get("cover_url") or ""
-            preview_url = body.get("preview_url") or ""
-            genre = body.get("genre") or "Music"
-            release_year = int(body.get("release_year") or 2024)
+                liked = 1 if body.get("liked") else 0
+                review_text = str(body.get("review_text", "")).strip()
+                listen_date = body.get("listen_date") or datetime.now().strftime("%Y-%m-%d")
+                username = body.get("username", "batin")
+                tags_input = body.get("tags", "")
 
-            conn = get_db()
-            cur = conn.cursor()
-            # Ensure track exists in tracks table
-            cur.execute(
-                """
-                INSERT INTO tracks (id, title, artist, album, release_year, genre, cover_url, preview_url, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'user-reviewed')
-                ON CONFLICT(id) DO UPDATE SET
-                    cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE tracks.cover_url END,
-                    preview_url = CASE WHEN excluded.preview_url != '' THEN excluded.preview_url ELSE tracks.preview_url END
-                """,
-                (track_id, title, artist, album, release_year, genre, cover_url, preview_url),
-            )
-            cur.execute("SELECT * FROM tracks WHERE id = ?", (track_id,))
-            track_row = dict(cur.fetchone())
-            conn.commit()
-            conn.close()
+                title = body.get("title") or "Şarkı"
+                artist = body.get("artist") or "Sanatçı"
+                album = body.get("album") or "Single"
+                cover_url = body.get("cover_url") or ""
+                preview_url = body.get("preview_url") or ""
+                genre = body.get("genre") or "Music"
+                try:
+                    release_year = int(body.get("release_year") or 2024)
+                except (TypeError, ValueError):
+                    release_year = 2024
 
-            # Tier 1 (Gemini Flash) automatically moderates and generates tags on review submission!
-            flash_res = MultiModelRouter.route_task(
-                "moderate_and_tag",
-                {
-                    "track_title": track_row["title"],
-                    "artist": track_row["artist"],
-                    "genre": track_row["genre"],
-                    "review_text": review_text,
-                },
-            )
-            auto_tags = flash_res["result"].get("suggested_tags", [])
-            final_tags = tags_input if tags_input else ",".join(auto_tags)
+                conn = get_db()
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        INSERT INTO tracks (id, title, artist, album, release_year, genre, cover_url, preview_url, source)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'user-reviewed')
+                        ON CONFLICT(id) DO UPDATE SET
+                            cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE tracks.cover_url END,
+                            preview_url = CASE WHEN excluded.preview_url != '' THEN excluded.preview_url ELSE tracks.preview_url END
+                        """,
+                        (track_id, title, artist, album, release_year, genre, cover_url, preview_url),
+                    )
+                    cur.execute("SELECT * FROM tracks WHERE id = ?", (track_id,))
+                    track_row = dict(cur.fetchone())
+                    conn.commit()
+                finally:
+                    conn.close()
 
-            conn = get_db()
-            cur = conn.cursor()
-            cur.execute(
-                """
-                INSERT INTO reviews (track_id, username, user_avatar, rating, liked, review_text, listen_date, tags, ai_moderated_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    track_id,
-                    username,
-                    "🎧",
-                    rating,
-                    liked,
-                    review_text,
-                    listen_date,
-                    final_tags,
-                    flash_res["model_name"],
-                ),
-            )
-            conn.commit()
-            conn.close()
-            return self._send_json({"ok": True, "ai_routing": flash_res, "message": "İnceleme başarıyla kaydedildi!"})
+                flash_res = MultiModelRouter.route_task(
+                    "moderate_and_tag",
+                    {
+                        "track_title": track_row["title"],
+                        "artist": track_row["artist"],
+                        "genre": track_row["genre"],
+                        "review_text": review_text,
+                    },
+                )
+                auto_tags = flash_res["result"].get("suggested_tags", [])
+                final_tags = tags_input if tags_input else ",".join(auto_tags)
 
-        if path == "/api/album/review":
-            album_id = body.get("album_id")
-            rating = float(body.get("rating", 4.5))
-            liked = 1 if body.get("liked") else 0
-            review_text = body.get("review_text", "").strip()
-            listen_date = body.get("listen_date") or datetime.now().strftime("%Y-%m-%d")
-            username = body.get("username", "batin")
+                conn = get_db()
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        INSERT INTO reviews (track_id, username, user_avatar, rating, liked, review_text, listen_date, tags, ai_moderated_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            track_id,
+                            username,
+                            "🎧",
+                            rating,
+                            liked,
+                            review_text,
+                            listen_date,
+                            final_tags,
+                            flash_res["model_name"],
+                        ),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
 
-            title = body.get("title") or "Albüm"
-            artist = body.get("artist") or "Sanatçı"
-            genre = body.get("genre") or "Music"
-            cover_url = body.get("cover_url") or ""
-            release_year = int(body.get("release_year") or 2024)
-            track_count = int(body.get("track_count") or 10)
+                return self._send_json({"ok": True, "ai_routing": flash_res, "message": "İnceleme başarıyla kaydedildi!"})
 
-            conn = get_db()
-            cur = conn.cursor()
-            # Ensure album exists
-            cur.execute(
-                """
-                INSERT INTO albums (id, title, artist, release_year, genre, track_count, cover_url)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE albums.cover_url END
-                """,
-                (album_id, title, artist, release_year, genre, track_count, cover_url),
-            )
-            cur.execute("SELECT * FROM albums WHERE id = ?", (album_id,))
-            album_row = dict(cur.fetchone())
-            conn.commit()
-            conn.close()
+            if path == "/api/album/review":
+                album_id = body.get("album_id")
+                if not album_id or not str(album_id).strip():
+                    return self._send_json({"error": "album_id gerekli"}, 400)
+                try:
+                    rating = float(body.get("rating", 4.5))
+                    if not (0.5 <= rating <= 5.0):
+                        return self._send_json({"error": "Puan 0.5 ile 5.0 arasında olmalı"}, 400)
+                except (TypeError, ValueError):
+                    return self._send_json({"error": "Geçersiz puan formatı"}, 400)
 
-            flash_res = MultiModelRouter.route_task(
-                "moderate_and_tag",
-                {
-                    "track_title": album_row["title"],
-                    "artist": album_row["artist"],
-                    "genre": album_row["genre"],
-                    "review_text": review_text,
-                },
-            )
+                liked = 1 if body.get("liked") else 0
+                review_text = str(body.get("review_text", "")).strip()
+                listen_date = body.get("listen_date") or datetime.now().strftime("%Y-%m-%d")
+                username = body.get("username", "batin")
 
-            conn = get_db()
-            cur = conn.cursor()
-            cur.execute(
-                """
-                INSERT INTO album_reviews (album_id, username, rating, liked, review_text, listen_date, ai_moderated_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    album_id,
-                    username,
-                    rating,
-                    liked,
-                    review_text,
-                    listen_date,
-                    flash_res["model_name"],
-                ),
-            )
-            conn.commit()
-            conn.close()
-            return self._send_json({"ok": True, "ai_routing": flash_res, "message": "Albüm incelemesi başarıyla kaydedildi!"})
+                title = body.get("title") or "Albüm"
+                artist = body.get("artist") or "Sanatçı"
+                genre = body.get("genre") or "Music"
+                cover_url = body.get("cover_url") or ""
+                try:
+                    release_year = int(body.get("release_year") or 2024)
+                except (TypeError, ValueError):
+                    release_year = 2024
+                try:
+                    track_count = int(body.get("track_count") or 10)
+                except (TypeError, ValueError):
+                    track_count = 10
 
-        if path == "/api/listenlist/toggle":
-            track_id = body.get("track_id")
-            conn = get_db()
-            cur = conn.cursor()
-            cur.execute("SELECT 1 FROM listenlist WHERE track_id = ?", (track_id,))
-            if cur.fetchone():
-                cur.execute("DELETE FROM listenlist WHERE track_id = ?", (track_id,))
-                added = False
-            else:
-                cur.execute("INSERT INTO listenlist (track_id) VALUES (?)", (track_id,))
-                added = True
-            conn.commit()
-            conn.close()
-            return self._send_json({"ok": True, "in_listenlist": added})
+                conn = get_db()
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        INSERT INTO albums (id, title, artist, release_year, genre, track_count, cover_url)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE albums.cover_url END
+                        """,
+                        (album_id, title, artist, release_year, genre, track_count, cover_url),
+                    )
+                    cur.execute("SELECT * FROM albums WHERE id = ?", (album_id,))
+                    album_row = dict(cur.fetchone())
+                    conn.commit()
+                finally:
+                    conn.close()
 
-        if path == "/api/favorites/set":
-            slot = int(body.get("slot", 1))
-            track_id = body.get("track_id")
-            conn = get_db()
-            cur = conn.cursor()
-            cur.execute(
-                "INSERT OR REPLACE INTO favorites (slot, track_id) VALUES (?, ?)",
-                (slot, track_id),
-            )
-            conn.commit()
-            conn.close()
-            return self._send_json({"ok": True})
+                flash_res = MultiModelRouter.route_task(
+                    "moderate_and_tag",
+                    {
+                        "track_title": album_row["title"],
+                        "artist": album_row["artist"],
+                        "genre": album_row["genre"],
+                        "review_text": review_text,
+                    },
+                )
 
-        if path == "/api/lists/create":
-            title = body.get("title", "Yeni Liste").strip()
-            description = body.get("description", "").strip()
-            track_ids = body.get("track_ids", [])
-            conn = get_db()
-            cur = conn.cursor()
-            cur.execute(
-                "INSERT INTO custom_lists (title, description, track_ids) VALUES (?, ?, ?)",
-                (title, description, json.dumps(track_ids)),
-            )
-            conn.commit()
-            conn.close()
-            return self._send_json({"ok": True})
+                conn = get_db()
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        INSERT INTO album_reviews (album_id, username, rating, liked, review_text, listen_date, ai_moderated_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            album_id,
+                            username,
+                            rating,
+                            liked,
+                            review_text,
+                            listen_date,
+                            flash_res["model_name"],
+                        ),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
 
-        if path == "/api/ai/route":
-            task_type = body.get("task_type", "moderate_and_tag")
-            payload = body.get("payload", {})
-            routed = MultiModelRouter.route_task(task_type, payload)
-            return self._send_json(routed)
+                return self._send_json({"ok": True, "ai_routing": flash_res, "message": "Albüm incelemesi başarıyla kaydedildi!"})
 
-        return self._send_json({"error": "Not found"}, 404)
+            if path == "/api/listenlist/toggle":
+                track_id = body.get("track_id")
+                if not track_id:
+                    return self._send_json({"error": "track_id gerekli"}, 400)
+                conn = get_db()
+                try:
+                    cur = conn.cursor()
+                    cur.execute("SELECT 1 FROM listenlist WHERE track_id = ?", (track_id,))
+                    if cur.fetchone():
+                        cur.execute("DELETE FROM listenlist WHERE track_id = ?", (track_id,))
+                        added = False
+                    else:
+                        cur.execute("INSERT INTO listenlist (track_id) VALUES (?)", (track_id,))
+                        added = True
+                    conn.commit()
+                finally:
+                    conn.close()
+                return self._send_json({"ok": True, "in_listenlist": added})
+
+            if path == "/api/favorites/set":
+                try:
+                    slot = int(body.get("slot", 0))
+                    if slot not in (1, 2, 3, 4):
+                        return self._send_json({"error": "Slot 1 ile 4 arasında olmalı"}, 400)
+                except (TypeError, ValueError):
+                    return self._send_json({"error": "Geçersiz slot formatı"}, 400)
+
+                track_id = body.get("track_id")
+                if not track_id:
+                    return self._send_json({"error": "track_id gerekli"}, 400)
+
+                conn = get_db()
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        "INSERT OR REPLACE INTO favorites (slot, track_id) VALUES (?, ?)",
+                        (slot, track_id),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+                return self._send_json({"ok": True})
+
+            if path == "/api/lists/create":
+                title = str(body.get("title", "")).strip()
+                if not title:
+                    return self._send_json({"error": "title gerekli"}, 400)
+                description = str(body.get("description", "")).strip()
+                track_ids = body.get("track_ids", [])
+                conn = get_db()
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        "INSERT INTO custom_lists (title, description, track_ids) VALUES (?, ?, ?)",
+                        (title, description, json.dumps(track_ids)),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+                return self._send_json({"ok": True})
+
+            if path == "/api/ai/route":
+                task_type = body.get("task_type", "moderate_and_tag")
+                payload = body.get("payload", {})
+                routed = MultiModelRouter.route_task(task_type, payload)
+                return self._send_json(routed)
+
+            return self._send_json({"error": "Not found"}, 404)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return self._send_json({"error": f"Sunucu hatası: {str(e)}"}, 500)
 
 
 def run_server():
