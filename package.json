@@ -1,0 +1,21 @@
+{
+  "name": "soundboxd",
+  "version": "1.0.0",
+  "description": "Letterboxd for Music — Rate, review, log tracks, listen to previews, and optimize AI tokens with Multi-Model Routing (Flash / Argon / Pro).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "music",
+    "letterboxd",
+    "rating",
+    "reviews",
+    "spotify",
+    "gemini",
+    "model-routing"
+  ],
+  "author": "",
+  "license": "MIT"
+}
