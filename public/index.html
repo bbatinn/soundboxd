@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SongLarp — Müzik & Albüm Puanlama Günlüğü | Letterboxd for Music</title>
+  <title>Larpmaxxing — Social Music & Album Rating Diary</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -22,7 +22,7 @@
           <span class="dot dot-green"></span>
           <span class="dot dot-blue"></span>
         </span>
-        <span class="brand-title">SONGLARP</span>
+        <span class="brand-title">LARPMAXXING</span>
       </a>
 
       <!-- Search -->
@@ -31,24 +31,21 @@
           <input
             type="text"
             id="globalSearchInput"
-            placeholder="Şarkı, albüm veya sanatçı ara..."
+            placeholder="Search songs, albums, or artists..."
             autocomplete="off"
           />
-          <button class="search-btn" id="globalSearchBtn" title="Ara">🔍</button>
+          <button class="search-btn" id="globalSearchBtn" title="Search">🔍</button>
         </div>
         <div id="searchSuggestions" class="search-suggestions hidden"></div>
       </div>
 
       <nav class="nav-links">
-        <button class="nav-tab active" data-tab="discover" onclick="switchTab('discover')">ŞARKILAR</button>
-        <button class="nav-tab" data-tab="albums" onclick="switchTab('albums')">💿 ALBÜMLER</button>
-        <button class="nav-tab" data-tab="diary" onclick="switchTab('diary')">GÜNLÜK & İNCELEMELER</button>
-        <button class="nav-tab" data-tab="lists" onclick="switchTab('lists')">LİSTELER</button>
+        <button class="nav-tab active" data-tab="discover" onclick="switchTab('discover')">TRACKS</button>
+        <button class="nav-tab" data-tab="albums" onclick="switchTab('albums')">💿 ALBUMS</button>
+        <button class="nav-tab" data-tab="diary" onclick="switchTab('diary')">DIARY & REVIEWS</button>
+        <button class="nav-tab" data-tab="lists" onclick="switchTab('lists')">LISTS</button>
         <button class="nav-tab" data-tab="listenlist" onclick="switchTab('listenlist')">
-          DİNLEME LİSTEM <span id="listenlistBadge" class="badge">0</span>
-        </button>
-        <button class="btn-log-main" onclick="openQuickLogModal()">
-          + LOG / PUANLA
+          LISTENLIST <span id="listenlistBadge" class="badge">0</span>
         </button>
       </nav>
     </div>
@@ -59,18 +56,18 @@
     <div class="container hero-inner">
       <div class="hero-copy">
         <div class="hero-eyebrow">
-          <span class="pill-legal">Müziğin Sosyal Günlüğü</span>
+          <span class="pill-legal">The Social Music Diary</span>
         </div>
-        <h1>Dinlediğin şarkıları puanla.<br/><em>Ruhuna dokunanları</em> günlüğüne kaydet.</h1>
+        <h1>Track every song you listen to.<br/><em>Save the ones that move you.</em></h1>
         <p class="hero-sub">
-          Milyonlarca şarkıyı ve albümü anında ara, yarım yıldız hassasiyetiyle (0.5★ – 5.0★) puanla, incelemelerini paylaş ve kişisel dinleme günlüğünü oluştur.
+          Search millions of songs and albums instantly, rate with half-star precision (0.5★ – 5.0★), share reviews, and build your personal listening diary.
         </p>
       </div>
       <!-- Profile Top 4 Favorites Showcase (Letterboxd "Four Favorites") -->
       <div class="top-four-card">
         <div class="top-four-header">
-          <span>🎧 <strong>@batin</strong> — DÖRT FAVORİ ŞARKI</span>
-          <span class="top-four-hint">Değiştirmek için şarkı kartından ★ Favori seç</span>
+          <span>🎧 <strong>@batin</strong> — FOUR FAVORITE TRACKS</span>
+          <span class="top-four-hint">Select a slot from any track card to update</span>
         </div>
         <div class="top-four-grid" id="topFourGrid"></div>
       </div>
@@ -84,14 +81,14 @@
     <section id="tab-discover" class="tab-panel active">
       <div class="section-header">
         <div>
-          <h2 id="tracksGridTitle">POPÜLER ŞARKILAR</h2>
-          <p class="section-subtitle">Bir şarkıya tıkla, dinle ve puanını ver.</p>
+          <h2 id="tracksGridTitle">POPULAR TRACKS</h2>
+          <p class="section-subtitle">Click any track to preview, rate, and review.</p>
         </div>
         <div class="filter-bar">
-          <button class="chip active" onclick="filterTracks('all', this)">Tümü</button>
-          <button class="chip" onclick="filterTracks('top', this)">En Yüksek Puanlılar (4.5★+)</button>
-          <button class="chip" onclick="runLivePresetSearch('Anatolian Rock', this)">Anadolu Rock</button>
-          <button class="chip" onclick="runLivePresetSearch('Daft Punk', this)">Elektronik</button>
+          <button class="chip active" onclick="filterTracks('all', this)">All</button>
+          <button class="chip" onclick="filterTracks('top', this)">Highest Rated (4.5★+)</button>
+          <button class="chip" onclick="runLivePresetSearch('Anatolian Rock', this)">Anatolian Rock</button>
+          <button class="chip" onclick="runLivePresetSearch('Daft Punk', this)">Electronic</button>
           <button class="chip" onclick="runLivePresetSearch('Radiohead', this)">Indie / Art Rock</button>
         </div>
       </div>
@@ -101,8 +98,8 @@
       <!-- Recent Community Reviews Stream -->
       <div class="section-header mt-large">
         <div>
-          <h2>SON TOPLULUK İNCELEMELERİ</h2>
-          <p class="section-subtitle">Topluluğun en son paylaştığı şarkı incelemeleri ve puanları.</p>
+          <h2>RECENT COMMUNITY REVIEWS</h2>
+          <p class="section-subtitle">Latest track ratings and reviews shared by the community.</p>
         </div>
       </div>
       <div id="recentReviewsList" class="reviews-stream"></div>
@@ -112,13 +109,13 @@
     <section id="tab-albums" class="tab-panel">
       <div class="section-header">
         <div>
-          <h2>💿 ALBÜMLER</h2>
-          <p class="section-subtitle">Tüm albümü baştan sona değerlendir, şarkı şarkı puan ver veya albümün bütününe tek yıldız bas.</p>
+          <h2>💿 ALBUMS</h2>
+          <p class="section-subtitle">Evaluate full albums from start to finish, rate individual tracks, or score the record as a whole.</p>
         </div>
         <div class="filter-bar">
-          <button class="chip active" onclick="loadAlbums(this)">Tüm Albümler</button>
+          <button class="chip active" onclick="loadAlbums(this)">All Albums</button>
           <button class="chip" onclick="searchAlbumsDirect('Rock', this)">Rock</button>
-          <button class="chip" onclick="searchAlbumsDirect('Electronic', this)">Elektronik</button>
+          <button class="chip" onclick="searchAlbumsDirect('Electronic', this)">Electronic</button>
           <button class="chip" onclick="searchAlbumsDirect('Hip-Hop', this)">Hip-Hop / Rap</button>
         </div>
       </div>
@@ -129,21 +126,21 @@
     <section id="tab-diary" class="tab-panel">
       <div class="section-header">
         <div>
-          <h2>DİNLEME GÜNLÜĞÜM</h2>
-          <p class="section-subtitle">Kronolojik dinleme geçmişin, verdiğin yıldızlar, kalpler ve inceleme notların.</p>
+          <h2>LISTENING DIARY</h2>
+          <p class="section-subtitle">Your chronological listening history, star ratings, likes, and review notes.</p>
         </div>
       </div>
       <div class="diary-table-wrap">
         <table class="diary-table">
           <thead>
             <tr>
-              <th>TARİH</th>
-              <th>KAPAK</th>
-              <th>ŞARKI & SANATÇI</th>
-              <th>YIL</th>
-              <th>PUAN</th>
-              <th>BEĞENİ</th>
-              <th>İNCELEME & ETİKETLER</th>
+              <th>DATE</th>
+              <th>COVER</th>
+              <th>TRACK & ARTIST</th>
+              <th>YEAR</th>
+              <th>RATING</th>
+              <th>LIKE</th>
+              <th>REVIEW & TAGS</th>
             </tr>
           </thead>
           <tbody id="diaryTableBody"></tbody>
@@ -155,10 +152,10 @@
     <section id="tab-lists" class="tab-panel">
       <div class="section-header">
         <div>
-          <h2>KÜRATÖRLÜ LİSTELER</h2>
-          <p class="section-subtitle">Letterboxd tarzı tematik şarkı listeleri oluştur ve paylaş.</p>
+          <h2>CURATED LISTS</h2>
+          <p class="section-subtitle">Create and share thematic Letterboxd-style track lists.</p>
         </div>
-        <button class="btn-secondary" onclick="openCreateListModal()">+ Yeni Liste Oluştur</button>
+        <button class="btn-secondary" onclick="openCreateListModal()">+ Create New List</button>
       </div>
       <div id="customListsContainer" class="lists-grid"></div>
     </section>
@@ -167,8 +164,8 @@
     <section id="tab-listenlist" class="tab-panel">
       <div class="section-header">
         <div>
-          <h2>DİNLEME LİSTEM</h2>
-          <p class="section-subtitle">Sonra odaklanarak dinlemek ve puanlamak için kaydettiğin şarkılar.</p>
+          <h2>LISTENLIST</h2>
+          <p class="section-subtitle">Tracks you have saved to listen to and rate later.</p>
         </div>
       </div>
       <div id="listenlistGrid" class="poster-grid"></div>
@@ -182,12 +179,12 @@
       <div class="audio-track-info">
         <img id="playerCover" src="" alt="Cover" />
         <div>
-          <div id="playerTitle" class="player-title">Şarkı Adı</div>
-          <div id="playerArtist" class="player-artist">Sanatçı</div>
+          <div id="playerTitle" class="player-title">Track Title</div>
+          <div id="playerArtist" class="player-artist">Artist</div>
         </div>
       </div>
       <audio id="audioElement" controls preload="none"></audio>
-      <button class="btn-close-player" onclick="stopAudioPreview()">✕ Kapat</button>
+      <button class="btn-close-player" onclick="stopAudioPreview()">✕ Close</button>
     </div>
   </div>
 
@@ -201,13 +198,13 @@
           <img id="modalCover" class="modal-cover" src="" alt="Album Cover" />
           <div class="modal-QuickActions">
             <button id="modalPlayBtn" class="btn-preview-full" onclick="playCurrentModalPreview()">
-              ▶ Önizleme Dinle
+              ▶ Play Preview
             </button>
             <button id="modalListenlistBtn" class="btn-secondary-full" onclick="toggleCurrentModalListenlist()">
-              + Dinleme Listeme Ekle
+              + Add to Listenlist
             </button>
             <div class="fav-slot-bar">
-              <span>Profil Top 4 Favoriye Koy:</span>
+              <span>Set in Profile Top 4:</span>
               <div class="fav-slot-btns">
                 <button onclick="setFavoriteSlot(1)">#1</button>
                 <button onclick="setFavoriteSlot(2)">#2</button>
@@ -220,7 +217,7 @@
           <!-- Letterboxd Rating Histogram -->
           <div class="histogram-box">
             <div class="histogram-header">
-              <span>PUAN DAĞILIMI</span>
+              <span>RATING DISTRIBUTION</span>
               <strong id="modalAvgRating">0.0 ★</strong>
             </div>
             <div id="modalHistogramBars" class="histogram-bars"></div>
@@ -231,10 +228,10 @@
         <div class="modal-right">
           <div class="modal-track-meta">
             <span id="modalGenreBadge" class="genre-pill">Genre</span>
-            <h2 id="modalTitle">Şarkı Başlığı</h2>
+            <h2 id="modalTitle">Track Title</h2>
             <p class="modal-artist-line">
-              <strong id="modalArtist">Sanatçı</strong> •
-              <span id="modalAlbum">Albüm</span> (<span id="modalYear">2024</span>)
+              <strong id="modalArtist">Artist</strong> •
+              <span id="modalAlbum">Album</span> (<span id="modalYear">2024</span>)
             </p>
           </div>
 
@@ -242,7 +239,7 @@
           <form id="reviewForm" class="log-form" onsubmit="submitReviewForm(event)">
             <div class="rating-row">
               <div class="star-picker-group">
-                <label>PUANIN (0.5★ – 5.0★)</label>
+                <label>YOUR RATING (0.5★ – 5.0★)</label>
                 <div class="interactive-stars-row">
                   <div class="interactive-star-buttons" id="trackStarButtons">
                     <button type="button" onclick="setPickerRating(1.0)">★</button>
@@ -263,39 +260,39 @@
                     value="4.5"
                     oninput="updateStarDisplay(this.value)"
                   />
-                  <span class="range-sub-hint">Hassas yarım yıldız (0.5★) için kaydır</span>
+                  <span class="range-sub-hint">Slide for half-star precision (0.5★)</span>
                 </div>
               </div>
 
               <div class="like-picker-group">
-                <label>BEĞENİ</label>
+                <label>LIKE</label>
                 <button type="button" id="likeToggleBtn" class="like-btn active" onclick="toggleHeartBtn()">
-                  ♥ Beğendim
+                  ♥ Liked
                 </button>
               </div>
 
               <div class="date-picker-group">
-                <label>DİNLEME TARİHİ</label>
+                <label>LISTEN DATE</label>
                 <input type="date" id="listenDateInput" />
               </div>
             </div>
 
             <div class="review-textarea-wrap">
               <div class="textarea-header">
-                <label for="reviewTextInput">İNCELEME / NOTUN</label>
+                <label for="reviewTextInput">REVIEW / NOTES</label>
                 <div class="ai-assist-pills">
-                  <button type="button" class="pill-claude" onclick="assistReviewWithClaude()" title="Letterboxd tarzı edebi bir inceleme taslağı oluştur">
-                    ✒️ Edebi İnceleme Öner
+                  <button type="button" class="pill-claude" onclick="assistReviewWithClaude()" title="Generate a Letterboxd-style poetic review draft">
+                    ✒️ Draft Poetic Review
                   </button>
-                  <button type="button" class="pill-pro" onclick="assistSimilarWithPro()" title="Bu şarkıya benzeyen benzer parçaları listele">
-                    🎧 Benzer Parçalar
+                  <button type="button" class="pill-pro" onclick="assistSimilarWithPro()" title="Find similar tracks based on production and atmosphere">
+                    🎧 Similar Tracks
                   </button>
                 </div>
               </div>
               <textarea
                 id="reviewTextInput"
                 rows="3"
-                placeholder="Bu şarkı sana ne hissettirdi? Prodüksiyon, sözler veya dinlediğin an..."
+                placeholder="How did this track make you feel? Notes on production, lyrics, or the moment you heard it..."
               ></textarea>
             </div>
 
@@ -305,17 +302,17 @@
               <input
                 type="text"
                 id="reviewTagsInput"
-                placeholder="Etiketler ekle (örn: gece, melankolik, bas, synth)"
+                placeholder="Add tags (e.g., late-night, melancholic, bassline, synth)"
               />
               <button type="submit" class="btn-save-log">
-                KAYDET
+                SAVE
               </button>
             </div>
           </form>
 
           <!-- Track Reviews List -->
           <div class="modal-reviews-section">
-            <h3>BU ŞARKI İÇİN YAZILAN İNCELEMELER</h3>
+            <h3>REVIEWS FOR THIS TRACK</h3>
             <div id="modalReviewsList" class="modal-reviews-list"></div>
           </div>
         </div>
@@ -327,15 +324,15 @@
   <div id="listModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeCreateListModal()">
     <div class="modal-card modal-small">
       <button class="modal-close" onclick="closeCreateListModal()">✕</button>
-      <h2>Yeni Şarkı Listesi Oluştur</h2>
+      <h2>Create New Track List</h2>
       <form onsubmit="submitNewList(event)" class="log-form">
-        <label>LİSTE BAŞLIĞI</label>
-        <input type="text" id="newListTitle" required placeholder="Örn: Gece Yağmurda Dinlenecek Şarkılar" />
-        <label>AÇIKLAMA</label>
-        <textarea id="newListDesc" rows="2" placeholder="Bu listenin hikayesi veya atmosferi nedir?"></textarea>
-        <label>LİSTEYE EKLENECEK ŞARKILARI SEÇ</label>
+        <label>LIST TITLE</label>
+        <input type="text" id="newListTitle" required placeholder="e.g., Late Night Highway Drives" />
+        <label>DESCRIPTION</label>
+        <textarea id="newListDesc" rows="2" placeholder="What is the story or mood behind this list?"></textarea>
+        <label>SELECT TRACKS TO INCLUDE</label>
         <div id="newListTrackCheckboxes" class="checkbox-track-list"></div>
-        <button type="submit" class="btn-save-log mt-small">Listeyi Oluştur</button>
+        <button type="submit" class="btn-save-log mt-small">Create List</button>
       </form>
     </div>
   </div>
@@ -349,14 +346,14 @@
         <div class="modal-left">
           <img id="albumModalCover" class="modal-cover" src="" alt="Album Cover" />
           <div class="album-stats-badge">
-            <div>Albüm Puanı: <strong id="albumModalAvgRating" style="color:var(--lb-green);">5.0 ★</strong></div>
+            <div>Album Rating: <strong id="albumModalAvgRating" style="color:var(--lb-green);">5.0 ★</strong></div>
             <div id="albumModalTrackAvgLine" style="font-size:0.75rem;color:var(--text-secondary);margin-top:2px;">
-              Şarkıların Ortalaması: <strong id="albumModalTrackAvgScore">—</strong>
+              Track Average: <strong id="albumModalTrackAvgScore">—</strong>
             </div>
           </div>
           <div class="histogram-box mt-small">
             <div class="histogram-header">
-              <span>ALBÜM PUAN DAĞILIMI</span>
+              <span>ALBUM RATING DISTRIBUTION</span>
             </div>
             <div id="albumModalHistogramBars" class="histogram-bars"></div>
           </div>
@@ -366,9 +363,9 @@
         <div class="modal-right">
           <div class="modal-track-meta">
             <span id="albumModalGenre" class="genre-pill">Album Genre</span>
-            <h2 id="albumModalTitle">Albüm Adı</h2>
+            <h2 id="albumModalTitle">Album Title</h2>
             <p class="modal-artist-line">
-              <strong id="albumModalArtist">Sanatçı</strong> • <span id="albumModalYear">2024</span> • <span id="albumModalTrackCount">10</span> Parça
+              <strong id="albumModalArtist">Artist</strong> • <span id="albumModalYear">2024</span> • <span id="albumModalTrackCount">10</span> Tracks
             </p>
           </div>
 
@@ -376,7 +373,7 @@
           <form onsubmit="submitAlbumReviewForm(event)" class="log-form">
             <div class="rating-row">
               <div class="star-picker-group">
-                <label>ALBÜM PUANIN (0.5★ – 5.0★)</label>
+                <label>YOUR ALBUM RATING (0.5★ – 5.0★)</label>
                 <div class="interactive-stars-row">
                   <div class="interactive-star-buttons" id="albumStarButtons">
                     <button type="button" onclick="setAlbumPickerRating(1.0)">★</button>
@@ -397,34 +394,34 @@
                     value="5.0"
                     oninput="updateAlbumStarDisplay(this.value)"
                   />
-                  <span class="range-sub-hint">Hassas yarım yıldız (0.5★) için kaydır</span>
+                  <span class="range-sub-hint">Slide for half-star precision (0.5★)</span>
                 </div>
               </div>
               <div class="like-picker-group">
-                <label>BEĞENİ</label>
+                <label>LIKE</label>
                 <button type="button" id="albumLikeBtn" class="like-btn active" onclick="toggleAlbumLikeBtn()">
-                  ♥ Favori Albüm
+                  ♥ Favorite Album
                 </button>
               </div>
             </div>
-            <textarea id="albumReviewInput" rows="2" placeholder="Bu albüm hakkındaki düşüncelerin ve öne çıkan parçalar..."></textarea>
+            <textarea id="albumReviewInput" rows="2" placeholder="Your thoughts on this album and standout tracks..."></textarea>
             <div style="display:flex;justify-content:flex-end;">
-              <button type="submit" class="btn-save-log">ALBÜMÜ PUANLA & KAYDET</button>
+              <button type="submit" class="btn-save-log">RATE & SAVE ALBUM</button>
             </div>
           </form>
 
           <!-- Tracklist -->
           <div class="album-tracklist-section">
             <div class="section-header" style="margin-bottom:10px;">
-              <h3 style="font-size:0.88rem;letter-spacing:0.8px;">ŞARKI LİSTESİ & TEK TEK PUANLAMA</h3>
-              <span style="font-size:0.75rem;color:var(--text-muted);">Önizleme dinlemek veya puanlamak için şarkıya tıkla</span>
+              <h3 style="font-size:0.88rem;letter-spacing:0.8px;">TRACKLIST & INDIVIDUAL RATINGS</h3>
+              <span style="font-size:0.75rem;color:var(--text-muted);">Click any track to preview or rate individually</span>
             </div>
             <div id="albumTracklistTable" class="album-tracklist-list"></div>
           </div>
 
           <!-- Album Reviews List -->
           <div class="modal-reviews-section mt-large">
-            <h3>BU ALBÜM İÇİN YAZILAN İNCELEMELER</h3>
+            <h3>REVIEWS FOR THIS ALBUM</h3>
             <div id="albumReviewsList" class="modal-reviews-list"></div>
           </div>
         </div>

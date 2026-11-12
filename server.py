@@ -278,9 +278,9 @@ def init_db():
                 "🎧",
                 5.0,
                 1,
-                "Gece 3'te otobanda tek başına sürerken çalan o barok synth melodisi... Daft Punk'ın en duygusal başyapıtı.",
+                "That baroque synth melody playing while driving alone on the highway at 3 AM... Daft Punk's most emotional masterpiece.",
                 "2026-11-10",
-                "gece-surusu,synth,nostalji,bas-yapit",
+                "night-drive,synth,nostalgia,masterpiece",
                 "gemini-flash",
             ),
             (
@@ -289,9 +289,9 @@ def init_db():
                 "🎧",
                 4.5,
                 1,
-                "Katman katman açılan gitar arpejleri insanı okyanusun dibine indirip tekrar yüzeye çıkarıyor.",
+                "Layered guitar arpeggios that pull you down to the bottom of the ocean and bring you back to the surface.",
                 "2026-11-09",
-                "arpej,derin,melankoli",
+                "arpeggio,deep,melancholy",
                 "gemini-flash",
             ),
             (
@@ -300,9 +300,9 @@ def init_db():
                 "🎧",
                 5.0,
                 1,
-                "1981 yılında Türkiye'de böyle bir space-rock / synth-prog prodüksiyonu yapılabilmiş olması inanılmaz. Zamansız.",
+                "Incredible that such a space-rock / synth-prog production was crafted in 1981. Truly timeless.",
                 "2026-11-08",
-                "anadolu-rock,zamansiz,prog",
+                "anatolian-rock,timeless,prog",
                 "gemini-flash",
             ),
             (
@@ -311,9 +311,9 @@ def init_db():
                 "🌙",
                 5.0,
                 1,
-                "3:30'daki beat switch tarihin en iyi geçişi olabilir. Albümü tam ortadan ikiye bölen altın oran.",
+                "The beat switch at 3:30 might be the greatest transition in music history—the golden ratio splitting the album in two.",
                 "2026-11-10",
-                "beat-switch,gece,rnb",
+                "beat-switch,late-night,rnb",
                 "gemini-flash",
             ),
             (
@@ -322,9 +322,9 @@ def init_db():
                 "🎹",
                 4.5,
                 1,
-                "Takılan CD efektinin bir şarkının en hipnotize edici kısmına dönüşmesi... Kevin Parker bir dahi.",
+                "Turning a skipping CD glitch effect into the most hypnotic moment of a track... Kevin Parker is a genius.",
                 "2026-11-07",
-                "psikedelik,hipnotik,synth",
+                "psychedelic,hypnotic,synth",
                 "gemini-flash",
             ),
             (
@@ -333,9 +333,9 @@ def init_db():
                 "💿",
                 5.0,
                 1,
-                "David Gilmour'un gitar solosu başladığı an zaman gerçekten duruyor, sözleri ise her geçen yıl daha sert vuruyor.",
+                "Time genuinely stands still the second David Gilmour's guitar solo begins, and the lyrics hit harder every passing year.",
                 "2026-11-06",
-                "klasik,gitar-solosu,felsefi",
+                "classic,guitar-solo,philosophical",
                 "gemini-flash",
             ),
         ]
@@ -367,8 +367,8 @@ def init_db():
             VALUES (?, ?, ?, ?)
             """,
             (
-                "Gece 02:00'den Sonra Ruhun Dinledikleri",
-                "Şehir uyurken kulaklıkla dinlenecek, atmosferi en yüksek 4 parça.",
+                "After 2:00 AM: Late Night Headphone Essentials",
+                "Four deeply atmospheric tracks for when the city is asleep.",
                 json.dumps(
                     [
                         "seed-daft-punk-veridis-quo",
@@ -1131,21 +1131,21 @@ class MultiModelRouter:
 
     @classmethod
     def _build_prompt(cls, task_type: str, payload: dict) -> str:
-        track = payload.get("track_title", "Şarkı")
-        artist = payload.get("artist", "Sanatçı")
+        track = payload.get("track_title", "Track")
+        artist = payload.get("artist", "Artist")
         draft = payload.get("review_text", "")
         if task_type == "moderate_and_tag":
-            return f"Şu müzik incelemesini denetle ve 4 kısa etiket çıkar ({track} - {artist}): {draft}"
+            return f"Moderate this music review and extract 4 short tags ({track} - {artist}): {draft}"
         if task_type == "similar_tracks":
-            return f"{artist} - {track} şarkısını seven birine prodüksiyon ve atmosfer açısından 3 şarkı öner."
+            return f"Recommend 3 similar tracks in terms of production and atmosphere for someone who loves {artist} - {track}."
         if task_type == "poetic_review":
-            return f"Letterboxd'daki en popüler sinematik müzik incelemeleri gibi '{artist} - {track}' için edebi, etkileyici Türkçe bir inceleme yaz. Kullanıcı notu: {draft}"
-        return f"Kullanıcının favori şarkılarına ve puanlarına göre derin Müzikal DNA ve Psiko-Akustik Karakter Analizi çıkar: {json.dumps(payload, ensure_ascii=False)}"
+            return f"Write a cinematic, Letterboxd-style poetic music review in English for '{artist} - {track}'. User note: {draft}"
+        return f"Generate a deep Musical DNA and Psycho-Acoustic Character Analysis based on the user's favorite tracks and ratings: {json.dumps(payload, ensure_ascii=False)}"
 
     @classmethod
     def _local_smart_engine(cls, selected_key: str, task_type: str, payload: dict):
-        track = payload.get("track_title", "Seçili Parça")
-        artist = payload.get("artist", "Sanatçı")
+        track = payload.get("track_title", "Selected Track")
+        artist = payload.get("artist", "Artist")
         genre = payload.get("genre", "Alternative")
         draft = payload.get("review_text", "").strip()
 
@@ -1154,25 +1154,25 @@ class MultiModelRouter:
             words = [w.lower().strip(".,!?") for w in draft.split() if len(w) > 3]
             auto_tags = [genre.lower().replace(" ", "-").split("/")[0].strip("-")]
             mood_map = {
-                "gece": "gece-surusu",
-                "bas": "bas-hatti",
-                "gitar": "gitar-solosu",
+                "night": "night-drive",
+                "bass": "bassline",
+                "guitar": "guitar-solo",
                 "synth": "analog-synth",
-                "duygusal": "melankolik",
-                "efsane": "bas-yapit",
-                "zaman": "zamansiz",
+                "emotional": "melancholic",
+                "masterpiece": "masterpiece",
+                "timeless": "timeless",
             }
             for k, tag in mood_map.items():
                 if k in draft.lower() and tag not in auto_tags:
                     auto_tags.append(tag)
             if len(auto_tags) < 3:
-                auto_tags.extend(["atmosferik", "kulaklikla-dinle"])
+                auto_tags.extend(["atmospheric", "headphones-on"])
             return (
                 {
                     "status": "approved",
-                    "sentiment": "Pozitif / Tutkulu",
+                    "sentiment": "Positive / Passionate",
                     "suggested_tags": auto_tags[:4],
-                    "summary": f"Gemini Flash: İnceleme temiz, {len(auto_tags[:4])} otomatik etiket üretildi (Argon tokenları korundu).",
+                    "summary": f"Review approved, {len(auto_tags[:4])} auto-tags generated.",
                 },
                 95,
                 28,
@@ -1185,44 +1185,44 @@ class MultiModelRouter:
             if "rock" in g_lower or "metal" in g_lower:
                 if any(k in a_lower for k in ["duman", "mor ve ötesi", "manga", "şebnem", "teoman"]):
                     recs = [
-                        "Mor ve Ötesi — Cambaz (Dinamik distorsiyon ve vokal enerjisi)",
-                        "Kurban — Yalan (Ritmik yürüyüş ve alternatif Türk rock tavrı)",
-                        "Mavi Sakal — İki Yol (90'lar Anadolu grunge atmosferi)",
+                        "Mor ve Ötesi — Cambaz (Dynamic distortion and driving vocal energy)",
+                        "Kurban — Yalan (Heavy rhythmic groove and alternative rock edge)",
+                        "Mavi Sakal — İki Yol (90s Anatolian grunge atmosphere)",
                     ]
                 else:
                     recs = [
-                        "Arctic Monkeys — 505 (Benzer karanlık gitar riff'leri ve yükselen tansiyon)",
-                        "The Strokes — Reptilia (Hızlı ritmik bateri ve melodik garage rock)",
-                        "Radiohead — 2 + 2 = 5 (Dinamik patlamalar ve deneysel rock yapısı)",
+                        "Arctic Monkeys — 505 (Dark guitar riffs and slow-building tension)",
+                        "The Strokes — Reptilia (Driving percussion and melodic garage rock)",
+                        "Radiohead — 2 + 2 = 5 (Dynamic crescendos and experimental rock structure)",
                     ]
             elif "rap" in g_lower or "hip" in g_lower:
                 recs = [
-                    "Nas — N.Y. State of Mind (Lirik derinlik ve klasik boom-bap ritim)",
-                    "J. Cole — Middle Child (Kişisel hikaye anlatımı ve sıcak brass örnekleri)",
-                    "A Tribe Called Quest — Electric Relaxation (Caz tınılı organik groove)",
+                    "Nas — N.Y. State of Mind (Lyrical depth and classic boom-bap rhythm)",
+                    "J. Cole — Middle Child (Intimate storytelling and warm brass samples)",
+                    "A Tribe Called Quest — Electric Relaxation (Jazz-inflected organic groove)",
                 ]
             elif "electronic" in g_lower or "house" in g_lower or "synth" in g_lower:
                 recs = [
-                    "Justice — Genesis (Analog synth patlamaları ve Fransız electro dokusu)",
-                    "Kavinsky — Nightcall (Sinematik retro-wave atmosfer)",
-                    "LCD Soundsystem — Someone Great (Elektronik katmanların melodik hüznü)",
+                    "Justice — Genesis (Analog synth swells and French touch texture)",
+                    "Kavinsky — Nightcall (Cinematic retro-wave midnight atmosphere)",
+                    "LCD Soundsystem — Someone Great (Melodic melancholy over layered synths)",
                 ]
             elif "r&b" in g_lower or "soul" in g_lower:
                 recs = [
-                    "Steve Lacy — Bad Habit (Lo-fi gitar groove'u ve içten vokal)",
-                    "Daniel Caesar — Japanese Denim (Sıcak analog R&B armonisi)",
-                    "Blood Orange — Charcoal Baby (Yumuşak synth dokuları ve melankoli)",
+                    "Steve Lacy — Bad Habit (Lo-fi guitar groove and intimate vocals)",
+                    "Daniel Caesar — Japanese Denim (Warm analog R&B harmony)",
+                    "Blood Orange — Charcoal Baby (Lush synth textures and nostalgia)",
                 ]
             else:
                 recs = [
-                    "Portishead — Glory Box (Hipnotize edici trip-hop yaylıları ve derin atmosfer)",
-                    "The Smile — Pana-vision (Karmaşık zaman ölçüleri ve piyano armonisi)",
-                    "Altın Gün — Süpürgesi Yoncadan (Organik ritim ve psychedelic akış)",
+                    "Portishead — Glory Box (Hypnotic trip-hop strings and deep atmosphere)",
+                    "The Smile — Pana-vision (Intricate time signatures and piano harmony)",
+                    "Altın Gün — Süpürgesi Yoncadan (Organic rhythm and psychedelic flow)",
                 ]
             return (
                 {
-                    "analysis_title": f"Gemini Pro — '{track}' Akustik & Benzerlik Analizi",
-                    "sonic_signature": f"{artist} bu parçada {genre} dokularını dinamik frekans geçişleriyle birleştiriyor.",
+                    "analysis_title": f"Acoustic & Similarity Analysis for '{track}'",
+                    "sonic_signature": f"{artist} blends {genre} textures with dynamic frequency transitions on this track.",
                     "recommendations": recs,
                 },
                 310,
@@ -1231,18 +1231,17 @@ class MultiModelRouter:
 
         if selected_key == "claude":
             # Tier 3: Claude Sonnet 4.5 literary/poetic review generation
-            base_thought = draft if draft else f"{track} başladığı anda odanın havası değişiyor."
+            base_thought = draft if draft else f"The moment {track} begins, the entire room shifts."
             poetic = (
-                f"“{base_thought} {artist}, '{track}' ile sadece bir melodi kurmuyor; "
-                f"insanın kendi hafızasında unuttuğu bir odaya anahtar bırakıyor. "
-                f"Her ölçüde biraz daha derinleşen {genre} katmanları, şarkı bittiğinde bile kulakta asılı kalan "
-                f"sinematik bir boşluk yaratıyor.”"
+                f"“{base_thought} With '{track}', {artist} doesn't just build a melody—they leave a key "
+                f"to a half-forgotten room in your memory. Every bar deepens the {genre} textures, "
+                f"leaving a cinematic stillness that lingers long after the final note fades.”"
             )
             return (
                 {
-                    "editorial_title": f"Claude Sonnet 4.5 — Letterboxd Edebi Eleştiri Kurgusu",
+                    "editorial_title": "Editorial Poetic Review Draft",
                     "poetic_review": poetic,
-                    "lyric_metaphor": "Zaman, bellek ve içsel yolculuk ekseninde analog sıcaklık.",
+                    "lyric_metaphor": "Analog warmth across time, memory, and late-night introspection.",
                 },
                 380,
                 195,

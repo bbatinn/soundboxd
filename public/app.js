@@ -77,7 +77,7 @@ function toggleHeartBtn() {
   const btn = document.getElementById("likeToggleBtn");
   if (btn) {
     btn.classList.toggle("active", appState.currentLiked);
-    btn.textContent = appState.currentLiked ? "♥ Beğendim" : "♡ Beğen";
+    btn.textContent = appState.currentLiked ? "♥ Liked" : "♡ Like";
   }
 }
 
@@ -91,7 +91,7 @@ async function loadBootstrap() {
     const data = await res.json();
     appState = { ...appState, ...data, backendAvailable: true };
   } catch (err) {
-    console.warn("Sunucu bağlantısı yerine yerel mod aktif:", err);
+    console.warn("Local mode active instead of server connection:", err);
     appState.backendAvailable = false;
     initFallbackLocalState();
   }
@@ -178,17 +178,11 @@ function initFallbackLocalState() {
       username: "batin",
       rating: 5.0,
       liked: 1,
-      review_text: "Gece 3'te otobanda tek başına sürerken çalan o barok synth melodisi... Daft Punk'ın en duygusal başyapıtı.",
+      review_text: "That baroque synth melody playing while driving alone on the highway at 3 AM... Daft Punk's most emotional masterpiece.",
       listen_date: "2026-11-10",
-      tags: "gece-surusu,synth,bas-yapit",
+      tags: "night-drive,synth,masterpiece",
       ai_moderated_by: "Gemini 3.8 Flash",
     },
-  ];
-  appState.token_summary = [
-    { model_tier: "Tier 1: Hızlı/Ekonomik", model_name: "Gemini 3.8 Flash", calls: 2, total_tokens: 400, saved_argon: 400 },
-    { model_tier: "Tier 2: Dengeli Analiz", model_name: "Gemini 2.5 Pro", calls: 1, total_tokens: 610, saved_argon: 610 },
-    { model_tier: "Tier 3: Edebi & Yaratıcı", model_name: "Claude Sonnet 4.5", calls: 1, total_tokens: 790, saved_argon: 790 },
-    { model_tier: "Tier 4: Zirve Sentez (En Değerli)", model_name: "Gemini 4 Argon", calls: 1, total_tokens: 1300, saved_argon: 0 },
   ];
 }
 
@@ -224,25 +218,25 @@ function renderTracksGrid(tracks, targetId = "tracksGrid") {
   const grid = document.getElementById(targetId);
   if (!grid) return;
   if (!tracks || tracks.length === 0) {
-    grid.innerHTML = `<p style="color:var(--text-secondary);">Henüz şarkı bulunamadı. Yukarıdaki arama çubuğundan dilediğin şarkıyı arayabilirsin.</p>`;
+    grid.innerHTML = `<p style="color:var(--text-secondary);">No tracks found yet. Use the search bar above to find any song.</p>`;
     return;
   }
 
   grid.innerHTML = tracks
     .map((t) => {
-      const avg = t.avg_rating && t.avg_rating > 0 ? `${t.avg_rating.toFixed(1)} ★` : "Yeni";
+      const avg = t.avg_rating && t.avg_rating > 0 ? `${t.avg_rating.toFixed(1)} ★` : "New";
       return `
       <div class="track-card">
         <div class="poster-wrap" onclick="openTrackModal('${t.id}')">
-          <img src="${t.cover_url}" alt="${t.title}" loading="lazy" onerror="this.src='https://placehold.co/400x400/1b2228/00e054?text=Soundboxd'" />
+          <img src="${t.cover_url}" alt="${t.title}" loading="lazy" onerror="this.src='https://placehold.co/400x400/1b2228/00e054?text=Larpmaxxing'" />
           <span class="rating-pill-corner">${avg}</span>
           <div class="poster-overlay">
             <div class="overlay-actions">
               <button class="btn-overlay" onclick="event.stopPropagation(); quickPlayPreview('${t.id}')">
-                ▶ Dinle
+                ▶ Preview
               </button>
               <button class="btn-overlay" onclick="event.stopPropagation(); openTrackModal('${t.id}')">
-                ★ Puanla
+                ★ Rate
               </button>
             </div>
           </div>
@@ -285,10 +279,10 @@ function renderRecentReviews() {
               ${r.liked ? '<span class="review-heart">♥</span>' : ""}
             </span>
           </div>
-          <p class="review-text">${r.review_text ? escapeHtml(r.review_text) : "<em>Sadece puan verildi.</em>"}</p>
+          <p class="review-text">${r.review_text ? escapeHtml(r.review_text) : "<em>Rated without a review.</em>"}</p>
           <div class="review-footer">
             <div>${tags}</div>
-            <span>👤 @${escapeHtml(r.username)} • 📅 ${escapeHtml(r.listen_date || "Bugün")}</span>
+            <span>👤 @${escapeHtml(r.username)} • 📅 ${escapeHtml(r.listen_date || "Today")}</span>
           </div>
         </div>
       </div>
@@ -351,7 +345,7 @@ function renderCustomLists() {
         <p style="font-size:0.83rem;color:var(--text-secondary);margin-top:4px;">${escapeHtml(lst.description || "")}</p>
         <div class="list-posters-strip">${strip}</div>
         <div style="font-size:0.74rem;color:var(--text-muted);">
-          Küratör: <strong>@${escapeHtml(lst.created_by || "batin")}</strong> • ${(lst.tracks || []).length} şarkı
+          Curated by <strong>@${escapeHtml(lst.created_by || "batin")}</strong> • ${(lst.tracks || []).length} tracks
         </div>
       </div>
     `;
@@ -365,14 +359,14 @@ function renderCustomLists() {
 async function performLiveSearch(query) {
   cancelSuggestionsAndHide();
   if (!query || !query.trim()) {
-    document.getElementById("tracksGridTitle").textContent = "POPÜLER ŞARKILAR";
+    document.getElementById("tracksGridTitle").textContent = "POPULAR TRACKS";
     renderTracksGrid(appState.tracks);
     return;
   }
 
   switchTab("discover");
   const titleEl = document.getElementById("tracksGridTitle");
-  titleEl.textContent = `"${query}" İÇİN CANLI KATALOG ARANIYOR...`;
+  titleEl.textContent = `SEARCHING CATALOG FOR "${query}"...`;
 
   try {
     if (appState.backendAvailable) {
@@ -384,7 +378,7 @@ async function performLiveSearch(query) {
         data.results.forEach((r) => {
           if (!existingIds.has(r.id)) appState.tracks.unshift(r);
         });
-        titleEl.textContent = `"${query.toUpperCase()}" ARAMA SONUÇLARI (${data.results.length} ŞARKI)`;
+        titleEl.textContent = `SEARCH RESULTS FOR "${query.toUpperCase()}" (${data.results.length} TRACKS)`;
         renderTracksGrid(data.results);
         return;
       }
@@ -410,10 +404,10 @@ async function performLiveSearch(query) {
     mapped.forEach((m) => {
       if (!appState.tracks.find((x) => x.id === m.id)) appState.tracks.unshift(m);
     });
-    titleEl.textContent = `"${query.toUpperCase()}" ARAMA SONUÇLARI (${mapped.length} ŞARKI)`;
+    titleEl.textContent = `SEARCH RESULTS FOR "${query.toUpperCase()}" (${mapped.length} TRACKS)`;
     renderTracksGrid(mapped);
   } catch (e) {
-    titleEl.textContent = `"${query}" SONUÇLARI`;
+    titleEl.textContent = `RESULTS FOR "${query}"`;
     const filtered = appState.tracks.filter(
       (t) =>
         t.title.toLowerCase().includes(query.toLowerCase()) ||
@@ -428,10 +422,10 @@ function filterTracks(mode, btnEl) {
   if (btnEl) btnEl.classList.add("active");
 
   if (mode === "top") {
-    document.getElementById("tracksGridTitle").textContent = "EN YÜKSEK PUANLI ŞARKILAR (4.5★+)";
+    document.getElementById("tracksGridTitle").textContent = "HIGHEST RATED TRACKS (4.5★+)";
     renderTracksGrid(appState.tracks.filter((t) => (t.avg_rating || 0) >= 4.5));
   } else {
-    document.getElementById("tracksGridTitle").textContent = "POPÜLER ŞARKILAR";
+    document.getElementById("tracksGridTitle").textContent = "POPULAR TRACKS";
     renderTracksGrid(appState.tracks);
   }
 }
@@ -463,7 +457,7 @@ async function quickPlayPreview(trackId) {
   }
 
   if (!track.preview_url) {
-    alert("Bu parça için 30sn önizleme bulunamadı, ancak detay sayfasından puanlayabilirsin.");
+    alert("No 30s audio preview found for this track, but you can rate and review it from the detail page.");
     return;
   }
 
@@ -511,7 +505,7 @@ async function openTrackModal(trackId) {
   document.getElementById("modalAiHelperOutput").classList.add("hidden");
 
   const listenBtn = document.getElementById("modalListenlistBtn");
-  listenBtn.textContent = track.in_listenlist ? "✓ Dinleme Listemde (Çıkar)" : "+ Dinleme Listeme Ekle";
+  listenBtn.textContent = track.in_listenlist ? "✓ In Listenlist (Remove)" : "+ Add to Listenlist";
 
   renderModalHistogram(track);
   renderModalReviews(track);
@@ -537,7 +531,7 @@ function playCurrentModalPreview() {
 
 function renderModalHistogram(track) {
   const avgEl = document.getElementById("modalAvgRating");
-  avgEl.textContent = track.avg_rating ? `${track.avg_rating.toFixed(2)} ★ (${track.review_count} oy)` : "Henüz puan yok";
+  avgEl.textContent = track.avg_rating ? `${track.avg_rating.toFixed(2)} ★ (${track.review_count} votes)` : "No ratings yet";
 
   const barsEl = document.getElementById("modalHistogramBars");
   const hist = track.histogram || {};
@@ -549,7 +543,7 @@ function renderModalHistogram(track) {
       const cnt = hist[s] || 0;
       const pct = Math.max(6, Math.round((cnt / maxVal) * 100));
       return `
-      <div class="hist-bar-col" title="${s}★: ${cnt} oy">
+      <div class="hist-bar-col" title="${s}★: ${cnt} votes">
         <div class="hist-bar" style="height:${pct}%;opacity:${cnt > 0 ? 1 : 0.25}"></div>
         <span class="hist-label">${s}</span>
       </div>
@@ -562,7 +556,7 @@ function renderModalReviews(track) {
   const listEl = document.getElementById("modalReviewsList");
   const revs = track.reviews || appState.reviews.filter((r) => r.track_id === track.id);
   if (!revs || revs.length === 0) {
-    listEl.innerHTML = `<p style="color:var(--text-muted);font-size:0.84rem;">Bu şarkı için ilk incelemeyi sen yaz!</p>`;
+    listEl.innerHTML = `<p style="color:var(--text-muted);font-size:0.84rem;">Be the first to write a review for this track!</p>`;
     return;
   }
   listEl.innerHTML = revs
@@ -575,7 +569,7 @@ function renderModalReviews(track) {
       </div>
       <p style="font-size:0.85rem;color:#e2e8f0;">${r.review_text ? escapeHtml(r.review_text) : ""}</p>
       <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">
-        📅 ${escapeHtml(r.listen_date || "Bugün")}
+        📅 ${escapeHtml(r.listen_date || "Today")}
       </div>
     </div>
   `
@@ -591,8 +585,8 @@ async function submitReviewForm(e) {
   const ratingVal = parseFloat(document.getElementById("ratingRangeInput").value);
   const payload = {
     track_id: t.id,
-    title: t.title || "Şarkı",
-    artist: t.artist || "Sanatçı",
+    title: t.title || "Track",
+    artist: t.artist || "Artist",
     album: t.album || "Single",
     cover_url: t.cover_url || "",
     preview_url: t.preview_url || "",
@@ -614,7 +608,7 @@ async function submitReviewForm(e) {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
-        showToast(`✓ "${t.title}" için ${ratingVal}★ puanınız günlüğe kaydedildi!`);
+        showToast(`✓ Logged ${ratingVal}★ rating for "${t.title}"!`);
         await loadBootstrap();
         await openTrackModal(t.id);
         return;
@@ -632,10 +626,10 @@ async function submitReviewForm(e) {
     track_artist: t.artist,
     track_cover: t.cover_url,
     release_year: t.release_year,
-    tags: payload.tags || "atmosferik,favori",
+    tags: payload.tags || "atmospheric,favorite",
     ai_moderated_by: "Gemini 3.8 Flash",
   });
-  showToast(`✓ "${t.title}" için ${ratingVal}★ puanınız kaydedildi!`);
+  showToast(`✓ Logged ${ratingVal}★ rating for "${t.title}"!`);
   renderAll();
   closeTrackModal();
 }
@@ -662,7 +656,7 @@ async function setFavoriteSlot(slot) {
       body: JSON.stringify({ slot, track_id: appState.currentModalTrack.id }),
     });
     await loadBootstrap();
-    alert(`#${slot} numaralı favori şarkın "${appState.currentModalTrack.title}" olarak güncellendi!`);
+    showToast(`✓ Favorite slot #${slot} updated to "${appState.currentModalTrack.title}"!`);
   }
 }
 
@@ -684,7 +678,7 @@ async function callModelRouter(taskType, payload) {
     model_name: taskType === "poetic_review" ? "Claude Sonnet 4.5" : taskType === "musical_dna_argon" ? "Gemini 4 Argon" : "Gemini 3.8 Flash",
     model_tier: "Smart Router",
     usage: { total_tokens: 240, saved_argon_tokens: 240 },
-    result: { poetic_review: "“Bu parça zamanın akışını yavaşlatan nadir kayıtlar arasında.”" },
+    result: { poetic_review: "“A rare recording that slows down the passage of time.”" },
   };
 }
 
@@ -692,7 +686,7 @@ async function assistReviewWithClaude() {
   if (!appState.currentModalTrack) return;
   const helperEl = document.getElementById("modalAiHelperOutput");
   helperEl.classList.remove("hidden");
-  helperEl.innerHTML = `✒️ İnceleme taslağı oluşturuluyor...`;
+  helperEl.innerHTML = `✒️ Crafting poetic review draft...`;
 
   const draft = document.getElementById("reviewTextInput").value;
   const data = await callModelRouter("poetic_review", {
@@ -705,8 +699,8 @@ async function assistReviewWithClaude() {
   const poetic = data.result.poetic_review || JSON.stringify(data.result);
   document.getElementById("reviewTextInput").value = poetic.replace(/^“|”$/g, "");
   helperEl.innerHTML = `
-    <div><strong>✒️ İnceleme Önerisi Hazırlandı!</strong></div>
-    <div style="margin-top:4px;color:#cbd5e1;">Metin kutuya aktarıldı, dilediğin gibi düzenleyebilirsin.</div>
+    <div><strong>✒️ Poetic Review Draft Ready!</strong></div>
+    <div style="margin-top:4px;color:#cbd5e1;">Inserted into the review box—edit freely before saving.</div>
   `;
 }
 
@@ -714,7 +708,7 @@ async function assistSimilarWithPro() {
   if (!appState.currentModalTrack) return;
   const helperEl = document.getElementById("modalAiHelperOutput");
   helperEl.classList.remove("hidden");
-  helperEl.innerHTML = `🎧 Benzer parçalar aranıyor...`;
+  helperEl.innerHTML = `🎧 Finding similar tracks...`;
 
   const data = await callModelRouter("similar_tracks", {
     track_title: appState.currentModalTrack.title,
@@ -724,7 +718,7 @@ async function assistSimilarWithPro() {
 
   const recs = (data.result.recommendations || []).map((r) => `<li>${r}</li>`).join("");
   helperEl.innerHTML = `
-    <div><strong>🎧 Önerilen Benzer Parçalar:</strong></div>
+    <div><strong>🎧 Recommended Similar Tracks:</strong></div>
     <ul style="margin:6px 0 0 18px;">${recs}</ul>
   `;
 }
@@ -769,7 +763,7 @@ async function submitNewList(e) {
 }
 
 // ============================================================================
-// ALBUM MODE (ALBÜM PUANLAMA & ŞARKI LİSTESİ)
+// ALBUM MODE (ALBUM RATING & TRACKLIST)
 // ============================================================================
 async function loadAlbums(btnEl) {
   if (btnEl) {
@@ -790,13 +784,13 @@ function renderAlbumsGrid(albums) {
   const grid = document.getElementById("albumsGrid");
   if (!grid) return;
   if (!albums || albums.length === 0) {
-    grid.innerHTML = `<p style="color:var(--text-secondary);">Albüm bulunamadı.</p>`;
+    grid.innerHTML = `<p style="color:var(--text-secondary);">No albums found.</p>`;
     return;
   }
 
   grid.innerHTML = albums
     .map((a) => {
-      const avg = a.avg_rating && a.avg_rating > 0 ? `${a.avg_rating.toFixed(1)} ★` : "Yeni";
+      const avg = a.avg_rating && a.avg_rating > 0 ? `${a.avg_rating.toFixed(1)} ★` : "New";
       return `
       <div class="track-card">
         <div class="poster-wrap" onclick="openAlbumModal('${escapeHtml(a.id)}')">
@@ -805,7 +799,7 @@ function renderAlbumsGrid(albums) {
           <div class="poster-overlay">
             <div class="overlay-actions">
               <button class="btn-overlay" onclick="event.stopPropagation(); openAlbumModal('${escapeHtml(a.id)}')">
-                💿 Albümü İncele & Puanla
+                💿 View & Rate Album
               </button>
             </div>
           </div>
@@ -814,7 +808,7 @@ function renderAlbumsGrid(albums) {
           <div class="card-title" title="${escapeHtml(a.title)}"><strong>${escapeHtml(a.title)}</strong></div>
           <div class="card-artist" title="${escapeHtml(a.artist)}">${escapeHtml(a.artist)}</div>
           <div class="card-meta-row">
-            <span>${escapeHtml(a.release_year || "")} • ${a.track_count || 10} Şarkı</span>
+            <span>${escapeHtml(a.release_year || "")} • ${a.track_count || 10} Tracks</span>
             <span>💬 ${a.review_count || 0}</span>
           </div>
         </div>
@@ -853,14 +847,14 @@ async function openAlbumModal(albumId) {
         document.getElementById("albumModalTrackCount").textContent = album.track_count || (album.tracks || []).length;
         document.getElementById("albumModalGenre").textContent = album.genre || "Music";
 
-        const avgScore = album.avg_rating ? `${album.avg_rating.toFixed(1)} ★` : "Henüz Puan Yok";
+        const avgScore = album.avg_rating ? `${album.avg_rating.toFixed(1)} ★` : "No Ratings Yet";
         document.getElementById("albumModalAvgRating").textContent = avgScore;
 
         const trackAvgEl = document.getElementById("albumModalTrackAvgScore");
         if (album.avg_track_score) {
           trackAvgEl.textContent = `${album.avg_track_score} ★`;
         } else {
-          trackAvgEl.textContent = "— (Şarkılar henüz oylanmadı)";
+          trackAvgEl.textContent = "— (Tracks not rated yet)";
         }
 
         renderAlbumTracklist(album.tracks || []);
@@ -879,7 +873,7 @@ function renderAlbumTracklist(tracks) {
   const box = document.getElementById("albumTracklistTable");
   if (!box) return;
   if (!tracks || tracks.length === 0) {
-    box.innerHTML = `<div style="padding:12px;color:var(--text-muted);">Şarkı listesi yüklenemedi.</div>`;
+    box.innerHTML = `<div style="padding:12px;color:var(--text-muted);">Tracklist could not be loaded.</div>`;
     return;
   }
 
@@ -892,7 +886,7 @@ function renderAlbumTracklist(tracks) {
       const safeCover = (appState.currentModalAlbum && appState.currentModalAlbum.cover_url) || "";
       const rText = t.rating
         ? `<button class="btn-mini-play" style="color:var(--lb-green);border-color:rgba(0,224,84,0.4);" onclick="rateTrackFromAlbum('${t.id}', '${safeTitle}', '${t.preview_url || ""}')">${t.rating}★</button>`
-        : `<button class="btn-mini-play" onclick="rateTrackFromAlbum('${t.id}', '${safeTitle}', '${t.preview_url || ""}')">★ Oyla</button>`;
+        : `<button class="btn-mini-play" onclick="rateTrackFromAlbum('${t.id}', '${safeTitle}', '${t.preview_url || ""}')">★ Rate</button>`;
       return `
       <div class="album-track-row">
         <div class="album-track-left" onclick="quickPlayPreviewDirect('${t.preview_url}', '${safeTitle}', '${safeArtist}', '${safeCover}')">
@@ -901,7 +895,7 @@ function renderAlbumTracklist(tracks) {
         </div>
         <div class="album-track-right">
           <span style="color:var(--text-muted);font-size:0.74rem;">${min}:${sec}</span>
-          ${t.preview_url ? `<button class="btn-mini-play" onclick="quickPlayPreviewDirect('${t.preview_url}', '${safeTitle}', '${safeArtist}', '${safeCover}')">▶ Dinle</button>` : ""}
+          ${t.preview_url ? `<button class="btn-mini-play" onclick="quickPlayPreviewDirect('${t.preview_url}', '${safeTitle}', '${safeArtist}', '${safeCover}')">▶ Play</button>` : ""}
           <span style="min-width:52px;text-align:right;">${rText}</span>
         </div>
       </div>
@@ -916,8 +910,8 @@ function rateTrackFromAlbum(trackId, title, previewUrl) {
     appState.tracks.unshift({
       id: trackId,
       title: title,
-      artist: a.artist || "Sanatçı",
-      album: a.title || "Albüm",
+      artist: a.artist || "Artist",
+      album: a.title || "Album",
       release_year: a.release_year || 2024,
       genre: a.genre || "Music",
       cover_url: a.cover_url || "",
@@ -933,7 +927,7 @@ function rateTrackFromAlbum(trackId, title, previewUrl) {
 
 function quickPlayPreviewDirect(url, title, artist, cover) {
   if (!url) {
-    alert("Bu şarkının önizlemesi bulunamadı.");
+    alert("No audio preview found for this track.");
     return;
   }
   const bar = document.getElementById("audioPlayerBar");
@@ -957,7 +951,7 @@ function renderAlbumHistogram(hist) {
       const cnt = hist[s] || 0;
       const pct = Math.max(6, Math.round((cnt / maxVal) * 100));
       return `
-      <div class="hist-bar-col" title="${s}★: ${cnt} oy">
+      <div class="hist-bar-col" title="${s}★: ${cnt} votes">
         <div class="hist-bar" style="height:${pct}%;opacity:${cnt > 0 ? 1 : 0.25}"></div>
         <span class="hist-label">${s}</span>
       </div>
@@ -970,7 +964,7 @@ function renderAlbumReviews(reviews) {
   const box = document.getElementById("albumReviewsList");
   if (!box) return;
   if (!reviews || reviews.length === 0) {
-    box.innerHTML = `<p style="color:var(--text-muted);font-size:0.82rem;">Bu albüm için ilk incelemeyi sen yaz!</p>`;
+    box.innerHTML = `<p style="color:var(--text-muted);font-size:0.82rem;">Be the first to review this album!</p>`;
     return;
   }
 
@@ -984,7 +978,7 @@ function renderAlbumReviews(reviews) {
       </div>
       <p style="font-size:0.85rem;color:#e2e8f0;">${r.review_text ? escapeHtml(r.review_text) : ""}</p>
       <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">
-        📅 ${escapeHtml(r.listen_date || "Bugün")}
+        📅 ${escapeHtml(r.listen_date || "Today")}
       </div>
     </div>
   `
@@ -1004,7 +998,7 @@ function toggleAlbumLikeBtn() {
   const btn = document.getElementById("albumLikeBtn");
   if (btn) {
     btn.classList.toggle("active", appState.albumLiked);
-    btn.textContent = appState.albumLiked ? "♥ Favori Albüm" : "♡ Beğen";
+    btn.textContent = appState.albumLiked ? "♥ Favorite Album" : "♡ Like";
   }
 }
 
@@ -1016,8 +1010,8 @@ async function submitAlbumReviewForm(e) {
   const ratingVal = parseFloat(document.getElementById("albumRatingRange").value);
   const payload = {
     album_id: a.id,
-    title: a.title || "Albüm",
-    artist: a.artist || "Sanatçı",
+    title: a.title || "Album",
+    artist: a.artist || "Artist",
     genre: a.genre || "Music",
     cover_url: a.cover_url || "",
     release_year: a.release_year || 2024,
@@ -1036,7 +1030,7 @@ async function submitAlbumReviewForm(e) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      showToast(`✓ "${a.title}" albümüne ${ratingVal}★ puanınız kaydedildi!`);
+      showToast(`✓ Logged ${ratingVal}★ rating for "${a.title}"!`);
       await openAlbumModal(a.id);
       await loadAlbums();
     }
@@ -1122,15 +1116,15 @@ function renderSuggestions(data, query, isLoadingLive = false) {
 
   if (suggestItems.length === 0) {
     box.innerHTML = isLoadingLive
-      ? `<div class="suggest-empty">🔍 "${escapeHtml(query)}" için öneriler getiriliyor...</div>`
-      : `<div class="suggest-empty">"${escapeHtml(query)}" için sonuç bulunamadı</div>`;
+      ? `<div class="suggest-empty">🔍 Finding suggestions for "${escapeHtml(query)}"...</div>`
+      : `<div class="suggest-empty">No results found for "${escapeHtml(query)}"</div>`;
     box.classList.remove("hidden");
     return;
   }
 
   const row = (item, idx) => {
     const d = item.data;
-    const sub = item.type === "song" ? `Şarkı • ${d.artist}` : `Albüm • ${d.artist}`;
+    const sub = item.type === "song" ? `Track • ${d.artist}` : `Album • ${d.artist}`;
     return `
       <div class="suggest-item" data-idx="${idx}">
         <img src="${escapeHtml(d.cover_url || "")}" alt="" onerror="this.src='https://placehold.co/80x80/1b2228/00e054?text=♪'" />
@@ -1143,11 +1137,11 @@ function renderSuggestions(data, query, isLoadingLive = false) {
 
   let html = "";
   if (songs.length) {
-    html += `<div class="suggest-group">ŞARKILAR</div>`;
+    html += `<div class="suggest-group">TRACKS</div>`;
     html += songs.map((_, i) => row(suggestItems[i], i)).join("");
   }
   if (albums.length) {
-    html += `<div class="suggest-group">ALBÜMLER</div>`;
+    html += `<div class="suggest-group">ALBUMS</div>`;
     html += albums.map((_, i) => row(suggestItems[songs.length + i], songs.length + i)).join("");
   }
   box.innerHTML = html;
