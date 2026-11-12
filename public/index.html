@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261112d" />
+  <link rel="stylesheet" href="styles.css?v=20261112e" />
 </head>
 <body>
   <!-- TOAST NOTIFICATION -->
@@ -383,8 +383,8 @@
     <div class="modal-card modal-list-creator">
       <button class="modal-close" onclick="closeCreateListModal()">✕</button>
       <div class="modal-header-compact">
-        <h2>Create New Track List</h2>
-        <p class="modal-subheading">Curate a themed playlist, soundtrack, or personal mixtape.</p>
+        <h2 id="listModalHeaderTitle">Create New Track List</h2>
+        <p id="listModalHeaderSubtitle" class="modal-subheading">Curate a themed playlist, soundtrack, or personal mixtape.</p>
       </div>
 
       <form onsubmit="submitNewList(event)" class="list-creator-form">
@@ -540,7 +540,7 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261112d"></script>
+  <script src="app.js?v=20261112e"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {

@@ -1993,6 +1993,46 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
                     conn.close()
                 return self._send_json({"ok": True})
 
+            if path == "/api/lists/update":
+                list_id = body.get("id")
+                if not list_id:
+                    return self._send_json({"error": "List id is required"}, 400)
+                title = str(body.get("title", "")).strip()
+                if not title:
+                    return self._send_json({"error": "Title is required"}, 400)
+                description = str(body.get("description", "")).strip()
+                track_ids = body.get("track_ids", [])
+                tracks_meta = body.get("tracks_meta", [])
+                conn = get_db()
+                try:
+                    cur = conn.cursor()
+                    for tm in tracks_meta:
+                        if tm.get("id"):
+                            cur.execute(
+                                """
+                                INSERT OR IGNORE INTO tracks (id, title, artist, album, release_year, genre, cover_url, preview_url, source)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'list-added')
+                                """,
+                                (
+                                    tm["id"],
+                                    tm.get("title", "Track"),
+                                    tm.get("artist", "Artist"),
+                                    tm.get("album", "Single"),
+                                    tm.get("release_year") or 2022,
+                                    tm.get("genre", "Music"),
+                                    tm.get("cover_url", ""),
+                                    tm.get("preview_url", ""),
+                                ),
+                            )
+                    cur.execute(
+                        "UPDATE custom_lists SET title = ?, description = ?, track_ids = ? WHERE id = ?",
+                        (title, description, json.dumps(track_ids), list_id),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+                return self._send_json({"ok": True, "message": "List updated successfully"})
+
             if path == "/api/lists/delete":
                 list_id = body.get("id")
                 if not list_id:

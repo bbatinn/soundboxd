@@ -405,22 +405,28 @@ function renderCustomLists() {
     .map((lst) => {
       const strip = (lst.tracks || [])
         .slice(0, 6)
-        .map((t) => `<img src="${t.cover_url}" alt="${escapeHtml(t.title)}" title="${escapeHtml(t.title)} - ${escapeHtml(t.artist)}" onclick="openTrackModal('${t.id}')" style="cursor:pointer;" />`)
+        .map((t) => `<img src="${t.cover_url}" alt="${escapeHtml(t.title)}" title="${escapeHtml(t.title)} - ${escapeHtml(t.artist)}" onclick="event.stopPropagation(); openTrackModal('${t.id}')" style="cursor:pointer;" />`)
         .join("");
       const safeTitle = escapeHtml(lst.title || "Untitled List");
       return `
-      <div class="list-card" id="listCard_${lst.id}">
+      <div class="list-card" id="listCard_${lst.id}" onclick="openEditListModal(${lst.id})" title="Click to edit list">
         <div class="list-card-header">
           <h3 class="list-card-title">${safeTitle}</h3>
-          <button type="button" class="btn-delete-list" title="Delete list" onclick="confirmDeleteList(${lst.id}, '${safeTitle.replace(/'/g, "\\'")}')">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-            <span>Delete</span>
-          </button>
+          <div class="list-card-actions">
+            <button type="button" class="btn-edit-list" title="Edit list" onclick="event.stopPropagation(); openEditListModal(${lst.id})">
+              ✎ Edit
+            </button>
+            <button type="button" class="btn-delete-list" title="Delete list" onclick="event.stopPropagation(); confirmDeleteList(${lst.id}, '${safeTitle.replace(/'/g, "\\'")}')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+              <span>Delete</span>
+            </button>
+          </div>
         </div>
         <p class="list-card-desc">${escapeHtml(lst.description || "")}</p>
         <div class="list-posters-strip">${strip || '<span style="font-size:0.75rem;color:var(--text-muted);">Empty list</span>'}</div>
         <div class="list-card-footer">
-          Curated by <strong>@${escapeHtml(lst.created_by || "batin")}</strong> • ${(lst.tracks || []).length} track${(lst.tracks || []).length === 1 ? '' : 's'}
+          <span>Curated by <strong>@${escapeHtml(lst.created_by || "batin")}</strong> • ${(lst.tracks || []).length} track${(lst.tracks || []).length === 1 ? '' : 's'}</span>
+          <span class="list-card-hint">Click card to edit ✎</span>
         </div>
       </div>
     `;
@@ -1005,6 +1011,7 @@ async function assistSimilarWithPro() {
 // ============================================================================
 // CUSTOM LISTS MODAL (Modern Interactive Track Picker & Selected Shelf)
 // ============================================================================
+let editingListId = null;
 let listModalSelectedTracks = new Map();
 let listModalPool = new Map();
 let listModalCurrentCandidates = [];
@@ -1018,7 +1025,11 @@ function updateListSelectedTray() {
   }
   const submitBtn = document.getElementById("newListSubmitBtn");
   if (submitBtn) {
-    submitBtn.textContent = `Create List (${count} Track${count === 1 ? "" : "s"})`;
+    if (editingListId) {
+      submitBtn.textContent = `Save Changes (${count} Track${count === 1 ? "" : "s"})`;
+    } else {
+      submitBtn.textContent = `Create List (${count} Track${count === 1 ? "" : "s"})`;
+    }
   }
 
   const tray = document.getElementById("listSelectedChipsContainer");
@@ -1188,6 +1199,13 @@ function clearListModalSearch() {
 }
 
 function openCreateListModal() {
+  editingListId = null;
+
+  const modalTitle = document.getElementById("listModalHeaderTitle");
+  if (modalTitle) modalTitle.textContent = "Create New Track List";
+  const modalSubtitle = document.getElementById("listModalHeaderSubtitle");
+  if (modalSubtitle) modalSubtitle.textContent = "Curate a themed playlist, soundtrack, or personal mixtape.";
+
   listModalSelectedTracks.clear();
   listModalPool.clear();
   appState.tracks.forEach((t) => listModalPool.set(t.id, t));
@@ -1209,7 +1227,48 @@ function openCreateListModal() {
   document.getElementById("listModal").classList.remove("hidden");
 }
 
+function openEditListModal(listId) {
+  const lst = (appState.custom_lists || []).find((x) => x.id === listId);
+  if (!lst) return;
+
+  editingListId = listId;
+
+  const modalTitle = document.getElementById("listModalHeaderTitle");
+  if (modalTitle) modalTitle.textContent = "Edit Track List";
+  const modalSubtitle = document.getElementById("listModalHeaderSubtitle");
+  if (modalSubtitle) modalSubtitle.textContent = "Update title, description, and manage tracks in this list.";
+
+  const titleEl = document.getElementById("newListTitle");
+  if (titleEl) titleEl.value = lst.title || "";
+  const descEl = document.getElementById("newListDesc");
+  if (descEl) descEl.value = lst.description || "";
+
+  const searchEl = document.getElementById("listTrackSearchInput");
+  if (searchEl) searchEl.value = "";
+  const clearBtn = document.getElementById("listSearchClearBtn");
+  if (clearBtn) clearBtn.classList.add("hidden");
+  const statusEl = document.getElementById("listCatalogStatus");
+  if (statusEl) statusEl.textContent = "Library Tracks";
+
+  listModalSelectedTracks.clear();
+  listModalPool.clear();
+
+  // Pre-fill existing tracks in order
+  (lst.tracks || []).forEach((t) => {
+    listModalSelectedTracks.set(t.id, t);
+    listModalPool.set(t.id, t);
+  });
+
+  // Also include general library tracks in pool
+  appState.tracks.forEach((t) => listModalPool.set(t.id, t));
+
+  updateListSelectedTray();
+  renderListModalCheckboxes(appState.tracks);
+  document.getElementById("listModal").classList.remove("hidden");
+}
+
 function closeCreateListModal() {
+  editingListId = null;
   document.getElementById("listModal").classList.add("hidden");
 }
 
@@ -1219,7 +1278,7 @@ async function submitNewList(e) {
   const description = document.getElementById("newListDesc").value.trim();
 
   if (listModalSelectedTracks.size === 0) {
-    showToast("Please select at least 1 track to create your list!");
+    showToast("Please select at least 1 track for your list!");
     return;
   }
 
@@ -1228,19 +1287,25 @@ async function submitNewList(e) {
 
   if (appState.backendAvailable) {
     try {
-      const res = await fetch("/api/lists/create", {
+      const endpoint = editingListId ? "/api/lists/update" : "/api/lists/create";
+      const payload = editingListId
+        ? { id: editingListId, title, description, track_ids: checked, tracks_meta: tracksMeta }
+        : { title, description, track_ids: checked, tracks_meta: tracksMeta };
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, description, track_ids: checked, tracks_meta: tracksMeta }),
+        body: JSON.stringify(payload),
       });
-      if (res.ok) {
-        showToast(`✓ Created list "${title}" with ${checked.length} tracks!`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        showToast(editingListId ? `✓ List "${title}" updated!` : `✓ Created list "${title}" with ${checked.length} tracks!`);
         await loadBootstrap();
       } else {
-        showToast("Error creating list, please try again.");
+        showToast(data.error || "Error saving list, please try again.");
       }
     } catch (err) {
-      showToast("Network error creating list.");
+      showToast("Network error saving list.");
     }
   }
   closeCreateListModal();
