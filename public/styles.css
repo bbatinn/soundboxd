@@ -1,4 +1,9 @@
+html {
+  color-scheme: dark;
+}
+
 :root {
+  color-scheme: dark;
   --bg-main: #14181c;
   --bg-elevated: #1b2228;
   --bg-card: #222b32;
@@ -20,10 +25,50 @@
   --tier-argon: #a855f7;
 }
 
-* {
+/* UNIVERSAL SLEEK DARK SCROLLBARS (Eliminates ugly white Windows scrollbars everywhere) */
+html, body, *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 224, 84, 0.75);
+}
+
+::-webkit-scrollbar-button,
+*::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+::-webkit-scrollbar-corner,
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 body {
@@ -1593,6 +1638,7 @@ body {
   max-height: 90vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden !important; /* CRITICAL: Never spawn outer modal-card scrollbar */
 }
 
 .modal-header-compact h2 {
@@ -1614,7 +1660,10 @@ body {
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
-  padding-right: 2px;
+  overflow-x: hidden;
+  padding-right: 6px;
+  flex: 1;
+  min-height: 0;
 }
 
 .list-meta-grid {
@@ -1831,18 +1880,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding-right: 4px;
-}
-
-.list-picker-scroll::-webkit-scrollbar,
-.checkbox-track-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.list-picker-scroll::-webkit-scrollbar-thumb,
-.checkbox-track-list::-webkit-scrollbar-thumb {
-  background: var(--border-subtle);
-  border-radius: 4px;
+  padding-right: 6px;
 }
 
 .list-picker-card {
