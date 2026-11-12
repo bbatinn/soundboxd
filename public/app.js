@@ -359,14 +359,12 @@ function renderCustomLists() {
     .join("");
 }
 
-}
-
 // ============================================================================
 // SEARCH & FILTERS (Live iTunes Public Catalog + Local Ratings)
 // ============================================================================
 async function performLiveSearch(query) {
   if (!query || !query.trim()) {
-    document.getElementById("tracksGridTitle").textContent = "POPÜLER & KÜRATÖRLÜ ŞARKILAR";
+    document.getElementById("tracksGridTitle").textContent = "POPÜLER ŞARKILAR";
     renderTracksGrid(appState.tracks);
     return;
   }
@@ -432,7 +430,7 @@ function filterTracks(mode, btnEl) {
     document.getElementById("tracksGridTitle").textContent = "EN YÜKSEK PUANLI ŞARKILAR (4.5★+)";
     renderTracksGrid(appState.tracks.filter((t) => (t.avg_rating || 0) >= 4.5));
   } else {
-    document.getElementById("tracksGridTitle").textContent = "POPÜLER & KÜRATÖRLÜ ŞARKILAR";
+    document.getElementById("tracksGridTitle").textContent = "POPÜLER ŞARKILAR";
     renderTracksGrid(appState.tracks);
   }
 }
@@ -472,7 +470,7 @@ async function quickPlayPreview(trackId) {
   const audio = document.getElementById("audioElement");
   document.getElementById("playerCover").src = track.cover_url;
   document.getElementById("playerTitle").textContent = track.title;
-  document.getElementById("playerArtist").textContent = `${track.artist} • ${track.album} (30sn Yasal Önizleme)`;
+  document.getElementById("playerArtist").textContent = `${track.artist} • ${track.album}`;
   bar.classList.remove("hidden");
   audio.src = track.preview_url;
   audio.play().catch(() => {});
@@ -772,7 +770,11 @@ async function submitNewList(e) {
 // ============================================================================
 // ALBUM MODE (ALBÜM PUANLAMA & ŞARKI LİSTESİ)
 // ============================================================================
-async function loadAlbums() {
+async function loadAlbums(btnEl) {
+  if (btnEl) {
+    document.querySelectorAll("#tab-albums .filter-bar .chip").forEach((b) => b.classList.remove("active"));
+    btnEl.classList.add("active");
+  }
   if (appState.backendAvailable) {
     try {
       const res = await fetch("/api/albums");
@@ -821,7 +823,11 @@ function renderAlbumsGrid(albums) {
     .join("");
 }
 
-async function searchAlbumsDirect(query) {
+async function searchAlbumsDirect(query, btnEl) {
+  if (btnEl) {
+    document.querySelectorAll("#tab-albums .filter-bar .chip").forEach((b) => b.classList.remove("active"));
+    btnEl.classList.add("active");
+  }
   if (appState.backendAvailable) {
     const res = await fetch(`/api/albums/search?q=${encodeURIComponent(query)}`);
     const data = await res.json();
@@ -880,22 +886,48 @@ function renderAlbumTracklist(tracks) {
     .map((t) => {
       const min = Math.floor(t.duration_sec / 60);
       const sec = String(t.duration_sec % 60).padStart(2, "0");
-      const rText = t.rating ? `<span class="review-stars">${t.rating}★</span>` : `<span style="color:var(--text-muted);font-size:0.75rem;">Oyla</span>`;
+      const safeTitle = (t.title || "").replace(/'/g, "\\'");
+      const safeArtist = ((appState.currentModalAlbum && appState.currentModalAlbum.artist) || "").replace(/'/g, "\\'");
+      const safeCover = (appState.currentModalAlbum && appState.currentModalAlbum.cover_url) || "";
+      const rText = t.rating
+        ? `<button class="btn-mini-play" style="color:var(--lb-green);border-color:rgba(0,224,84,0.4);" onclick="rateTrackFromAlbum('${t.id}', '${safeTitle}', '${t.preview_url || ""}')">${t.rating}★</button>`
+        : `<button class="btn-mini-play" onclick="rateTrackFromAlbum('${t.id}', '${safeTitle}', '${t.preview_url || ""}')">★ Oyla</button>`;
       return `
       <div class="album-track-row">
-        <div class="album-track-left" onclick="quickPlayPreviewDirect('${t.preview_url}', '${t.title.replace(/'/g, "\\'")}', '${appState.currentModalAlbum.artist.replace(/'/g, "\\'")}', '${appState.currentModalAlbum.cover_url}')">
+        <div class="album-track-left" onclick="quickPlayPreviewDirect('${t.preview_url}', '${safeTitle}', '${safeArtist}', '${safeCover}')">
           <span class="album-track-num">${t.track_number}</span>
           <strong>${escapeHtml(t.title)}</strong>
         </div>
         <div class="album-track-right">
           <span style="color:var(--text-muted);font-size:0.74rem;">${min}:${sec}</span>
-          ${t.preview_url ? `<button class="btn-mini-play" onclick="quickPlayPreviewDirect('${t.preview_url}', '${t.title.replace(/'/g, "\\'")}', '${appState.currentModalAlbum.artist.replace(/'/g, "\\'")}', '${appState.currentModalAlbum.cover_url}')">▶ Dinle</button>` : ""}
-          <span style="min-width:35px;text-align:right;">${rText}</span>
+          ${t.preview_url ? `<button class="btn-mini-play" onclick="quickPlayPreviewDirect('${t.preview_url}', '${safeTitle}', '${safeArtist}', '${safeCover}')">▶ Dinle</button>` : ""}
+          <span style="min-width:52px;text-align:right;">${rText}</span>
         </div>
       </div>
     `;
     })
     .join("");
+}
+
+function rateTrackFromAlbum(trackId, title, previewUrl) {
+  const a = appState.currentModalAlbum || {};
+  if (!appState.tracks.find((x) => x.id === trackId)) {
+    appState.tracks.unshift({
+      id: trackId,
+      title: title,
+      artist: a.artist || "Sanatçı",
+      album: a.title || "Albüm",
+      release_year: a.release_year || 2024,
+      genre: a.genre || "Music",
+      cover_url: a.cover_url || "",
+      preview_url: previewUrl || "",
+      avg_rating: 0,
+      review_count: 0,
+      histogram: {},
+    });
+  }
+  closeAlbumModal();
+  openTrackModal(trackId);
 }
 
 function quickPlayPreviewDirect(url, title, artist, cover) {
@@ -907,7 +939,7 @@ function quickPlayPreviewDirect(url, title, artist, cover) {
   const audio = document.getElementById("audioElement");
   document.getElementById("playerCover").src = cover;
   document.getElementById("playerTitle").textContent = title;
-  document.getElementById("playerArtist").textContent = `${artist} • 30sn Yasal Önizleme`;
+  document.getElementById("playerArtist").textContent = `${artist}`;
   bar.classList.remove("hidden");
   audio.src = url;
   audio.play().catch(() => {});
@@ -1034,20 +1066,168 @@ function switchTab(tabName) {
   }
 }
 
+// ============================================================================
+// SEARCH SUGGESTIONS (typeahead dropdown under the search bar)
+// ============================================================================
+let suggestTimer = null;
+let suggestSeq = 0;
+let suggestItems = [];
+let suggestActive = -1;
+
+function hideSuggestions() {
+  const box = document.getElementById("searchSuggestions");
+  if (box) box.classList.add("hidden");
+  suggestActive = -1;
+}
+
+function renderSuggestions(data, query) {
+  const box = document.getElementById("searchSuggestions");
+  if (!box) return;
+  const songs = data.songs || [];
+  const albums = data.albums || [];
+  suggestItems = [
+    ...songs.map((s) => ({ type: "song", data: s })),
+    ...albums.map((a) => ({ type: "album", data: a })),
+  ];
+  suggestActive = -1;
+
+  if (suggestItems.length === 0) {
+    box.innerHTML = `<div class="suggest-empty">"${escapeHtml(query)}" için sonuç bulunamadı</div>`;
+    box.classList.remove("hidden");
+    return;
+  }
+
+  const row = (item, idx) => {
+    const d = item.data;
+    const sub = item.type === "song" ? `Şarkı • ${d.artist}` : `Albüm • ${d.artist}`;
+    return `
+      <div class="suggest-item" data-idx="${idx}">
+        <img src="${escapeHtml(d.cover_url || "")}" alt="" onerror="this.src='https://placehold.co/80x80/1b2228/00e054?text=♪'" />
+        <div class="suggest-text">
+          <div class="suggest-title">${escapeHtml(d.title)}</div>
+          <div class="suggest-sub">${escapeHtml(sub)}</div>
+        </div>
+      </div>`;
+  };
+
+  let html = "";
+  if (songs.length) {
+    html += `<div class="suggest-group">ŞARKILAR</div>`;
+    html += songs.map((_, i) => row(suggestItems[i], i)).join("");
+  }
+  if (albums.length) {
+    html += `<div class="suggest-group">ALBÜMLER</div>`;
+    html += albums.map((_, i) => row(suggestItems[songs.length + i], songs.length + i)).join("");
+  }
+  box.innerHTML = html;
+  box.classList.remove("hidden");
+}
+
+async function fetchSuggestions(query) {
+  const seq = ++suggestSeq;
+  try {
+    const res = await fetch(`/api/suggest?q=${encodeURIComponent(query)}`);
+    const data = await res.json();
+    if (seq !== suggestSeq) return; // a newer keystroke already fired
+    const input = document.getElementById("globalSearchInput");
+    if (!input || input.value.trim() !== query) return;
+    renderSuggestions(data, query);
+  } catch (_) {}
+}
+
+function selectSuggestion(idx) {
+  const item = suggestItems[idx];
+  if (!item) return;
+  hideSuggestions();
+  const input = document.getElementById("globalSearchInput");
+  if (item.type === "song") {
+    const s = item.data;
+    if (!appState.tracks.find((t) => t.id === s.id)) {
+      appState.tracks.unshift({
+        avg_rating: 0,
+        review_count: 0,
+        histogram: {},
+        ...s,
+        cover_url: (s.cover_url || "").replace("300x300bb", "600x600bb"),
+      });
+    }
+    if (input) input.value = "";
+    openTrackModal(s.id);
+  } else {
+    if (input) input.value = "";
+    openAlbumModal(item.data.id);
+  }
+}
+
+function highlightSuggestion() {
+  document.querySelectorAll("#searchSuggestions .suggest-item").forEach((el) => {
+    el.classList.toggle("active", Number(el.dataset.idx) === suggestActive);
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const searchInput = document.getElementById("globalSearchInput");
   const searchBtn = document.getElementById("globalSearchBtn");
+  const box = document.getElementById("searchSuggestions");
 
   if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      const q = searchInput.value.trim();
+      clearTimeout(suggestTimer);
+      if (q.length < 2) {
+        suggestSeq++;
+        hideSuggestions();
+        return;
+      }
+      suggestTimer = setTimeout(() => fetchSuggestions(q), 250);
+    });
+
     searchInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
+      const open = box && !box.classList.contains("hidden") && suggestItems.length > 0;
+      if (e.key === "ArrowDown" && open) {
         e.preventDefault();
-        performLiveSearch(searchInput.value);
+        suggestActive = (suggestActive + 1) % suggestItems.length;
+        highlightSuggestion();
+      } else if (e.key === "ArrowUp" && open) {
+        e.preventDefault();
+        suggestActive = (suggestActive - 1 + suggestItems.length) % suggestItems.length;
+        highlightSuggestion();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (open && suggestActive >= 0) {
+          selectSuggestion(suggestActive);
+        } else {
+          hideSuggestions();
+          performLiveSearch(searchInput.value);
+        }
+      } else if (e.key === "Escape") {
+        hideSuggestions();
+      }
+    });
+
+    searchInput.addEventListener("focus", () => {
+      if (searchInput.value.trim().length >= 2 && box && box.innerHTML) box.classList.remove("hidden");
+    });
+  }
+
+  if (box) {
+    // mousedown fires before the input's blur, so the click is not lost
+    box.addEventListener("mousedown", (e) => {
+      const el = e.target.closest(".suggest-item");
+      if (el) {
+        e.preventDefault();
+        selectSuggestion(Number(el.dataset.idx));
       }
     });
   }
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".search-box")) hideSuggestions();
+  });
+
   if (searchBtn) {
     searchBtn.addEventListener("click", () => {
+      hideSuggestions();
       performLiveSearch(searchInput.value);
     });
   }

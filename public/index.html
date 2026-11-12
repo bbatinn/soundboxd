@@ -25,15 +25,18 @@
         <span class="brand-title">SONGLARP</span>
       </a>
 
-      <!-- Global Live Music Search (iTunes / Spotify Public Metadata) -->
-      <div class="search-wrapper">
-        <input
-          type="text"
-          id="globalSearchInput"
-          placeholder="Dünyadaki herhangi bir şarkıyı, albümü veya sanatçıyı ara..."
-          autocomplete="off"
-        />
-        <button class="search-btn" id="globalSearchBtn" title="Ara">🔍</button>
+      <!-- Search -->
+      <div class="search-box">
+        <div class="search-wrapper">
+          <input
+            type="text"
+            id="globalSearchInput"
+            placeholder="Şarkı, albüm veya sanatçı ara..."
+            autocomplete="off"
+          />
+          <button class="search-btn" id="globalSearchBtn" title="Ara">🔍</button>
+        </div>
+        <div id="searchSuggestions" class="search-suggestions hidden"></div>
       </div>
 
       <nav class="nav-links">
@@ -81,8 +84,8 @@
     <section id="tab-discover" class="tab-panel active">
       <div class="section-header">
         <div>
-          <h2 id="tracksGridTitle">POPÜLER & KÜRATÖRLÜ ŞARKILAR</h2>
-          <p class="section-subtitle">Kapaklara tıklayarak 30 saniyelik yasal önizlemeyi dinle, puan dağılımını (histogram) incele veya kendi puanını ver.</p>
+          <h2 id="tracksGridTitle">POPÜLER ŞARKILAR</h2>
+          <p class="section-subtitle">Bir şarkıya tıkla, dinle ve puanını ver.</p>
         </div>
         <div class="filter-bar">
           <button class="chip active" onclick="filterTracks('all', this)">Tümü</button>
@@ -109,14 +112,14 @@
     <section id="tab-albums" class="tab-panel">
       <div class="section-header">
         <div>
-          <h2>💿 ALBÜM PUANLAMA MODU (ALBUM MODE)</h2>
+          <h2>💿 ALBÜMLER</h2>
           <p class="section-subtitle">Tüm albümü baştan sona değerlendir, şarkı şarkı puan ver veya albümün bütününe tek yıldız bas.</p>
         </div>
         <div class="filter-bar">
-          <button class="chip active" onclick="loadAlbums()">Tüm Albümler</button>
-          <button class="chip" onclick="searchAlbumsDirect('Rock')">Rock</button>
-          <button class="chip" onclick="searchAlbumsDirect('Electronic')">Elektronik</button>
-          <button class="chip" onclick="searchAlbumsDirect('Hip-Hop')">Hip-Hop / Rap</button>
+          <button class="chip active" onclick="loadAlbums(this)">Tüm Albümler</button>
+          <button class="chip" onclick="searchAlbumsDirect('Rock', this)">Rock</button>
+          <button class="chip" onclick="searchAlbumsDirect('Electronic', this)">Elektronik</button>
+          <button class="chip" onclick="searchAlbumsDirect('Hip-Hop', this)">Hip-Hop / Rap</button>
         </div>
       </div>
       <div id="albumsGrid" class="poster-grid"></div>
@@ -126,7 +129,7 @@
     <section id="tab-diary" class="tab-panel">
       <div class="section-header">
         <div>
-          <h2>DİNLEME GÜNLÜĞÜM (DIARY)</h2>
+          <h2>DİNLEME GÜNLÜĞÜM</h2>
           <p class="section-subtitle">Kronolojik dinleme geçmişin, verdiğin yıldızlar, kalpler ve inceleme notların.</p>
         </div>
       </div>
@@ -164,7 +167,7 @@
     <section id="tab-listenlist" class="tab-panel">
       <div class="section-header">
         <div>
-          <h2>DİNLEME LİSTEM (LISTENLIST)</h2>
+          <h2>DİNLEME LİSTEM</h2>
           <p class="section-subtitle">Sonra odaklanarak dinlemek ve puanlamak için kaydettiğin şarkılar.</p>
         </div>
       </div>
@@ -180,7 +183,7 @@
         <img id="playerCover" src="" alt="Cover" />
         <div>
           <div id="playerTitle" class="player-title">Şarkı Adı</div>
-          <div id="playerArtist" class="player-artist">Sanatçı • 30sn Yasal Önizleme</div>
+          <div id="playerArtist" class="player-artist">Sanatçı</div>
         </div>
       </div>
       <audio id="audioElement" controls preload="none"></audio>
@@ -198,7 +201,7 @@
           <img id="modalCover" class="modal-cover" src="" alt="Album Cover" />
           <div class="modal-QuickActions">
             <button id="modalPlayBtn" class="btn-preview-full" onclick="playCurrentModalPreview()">
-              ▶ 30sn Önizleme Dinle
+              ▶ Önizleme Dinle
             </button>
             <button id="modalListenlistBtn" class="btn-secondary-full" onclick="toggleCurrentModalListenlist()">
               + Dinleme Listeme Ekle
