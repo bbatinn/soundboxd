@@ -853,6 +853,155 @@ def search_albums_catalog(query: str, limit: int = 12):
     return enrich_albums_with_stats(results[:limit])
 
 
+DISCOVER_ARTISTS_POOL = [
+    "Nirvana", "Lana Del Rey", "Interpol", "Queens of the Stone Age", "LCD Soundsystem",
+    "Aphex Twin", "Sade", "The Cure", "Joy Division", "New Order",
+    "Smashing Pumpkins", "Pixies", "Sonic Youth", "My Bloody Valentine", "Slowdive",
+    "Cocteau Twins", "Björk", "Nine Inch Nails", "Tool", "System of a Down",
+    "Linkin Park", "Red Hot Chili Peppers", "Foo Fighters", "Oasis", "Blur",
+    "Pulp", "Suede", "The Smiths", "David Bowie", "Prince",
+    "Michael Jackson", "Stevie Wonder", "Marvin Gaye", "Erykah Badu", "D'Angelo",
+    "Lauryn Hill", "OutKast", "A Tribe Called Quest", "Wu-Tang Clan", "MF DOOM",
+    "Nas", "Kanye West", "Kid Cudi", "Childish Gambino", "SZA",
+    "Steve Lacy", "Blood Orange", "Daniel Caesar", "Kaytranada", "Anderson .Paak",
+    "Thundercat", "Flying Lotus", "Bonobo", "Four Tet", "Burial",
+    "Bicep", "Röyksopp", "Air", "Kavinsky", "Gesaffelstein",
+    "Chemical Brothers", "Prodigy", "Fatboy Slim", "Moby", "Underworld",
+    "Khruangbin", "Mac DeMarco", "MGMT", "Empire of the Sun", "Phoenix",
+    "Vampire Weekend", "The Strokes", "Franz Ferdinand", "Kasabian", "Royal Blood",
+    "Fontaines D.C.", "Idles", "King Gizzard", "Unknown Mortal Orchestra", "Toro y Moi",
+    "Erkin Koray", "Moğollar", "Teoman", "Pentagram", "Kurban",
+    "Athena", "Manga", "Yavuz Çetin", "Altın Gün", "Nick Cave",
+    "PJ Harvey", "Fiona Apple", "Elliott Smith", "Sufjan Stevens", "Bon Iver",
+    "Sigur Rós", "Explosions in the Sky", "Mogwai", "Godspeed You! Black Emperor", "Boards of Canada",
+]
+
+
+def discover_more_catalog(item_type: str = "tracks", page: int = 0, query: str = ""):
+    """Fetches a fresh page of tracks or albums from the live iTunes catalog for infinite scrolling."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    entity = "album" if item_type == "albums" else "song"
+    results = []
+
+    if query and query.strip():
+        # Paginated live search for the active query/filter
+        try:
+            offset = max(0, (page + 1) * 18)
+            encoded = urllib.parse.quote(query.strip())
+            url = f"https://itunes.apple.com/search?term={encoded}&entity={entity}&limit=20&offset={offset}"
+            req = urllib.request.Request(url, headers={"User-Agent": "Larpmaxxing/1.0"})
+            with urllib.request.urlopen(req, timeout=4.5) as resp:
+                raw_items = json.loads(resp.read().decode("utf-8")).get("results", [])
+        except Exception:
+            raw_items = []
+    else:
+        # Pick 5 distinct artists for this page from DISCOVER_ARTISTS_POOL
+        pool_len = len(DISCOVER_ARTISTS_POOL)
+        start_idx = (page * 5) % pool_len
+        batch_artists = [DISCOVER_ARTISTS_POOL[(start_idx + i) % pool_len] for i in range(5)]
+        per_artist_offset = (page // (pool_len // 5)) * 4
+
+        def fetch_artist(artist_name):
+            try:
+                encoded = urllib.parse.quote(artist_name)
+                url = f"https://itunes.apple.com/search?term={encoded}&entity={entity}&limit=5&offset={per_artist_offset}"
+                req = urllib.request.Request(url, headers={"User-Agent": "Larpmaxxing/1.0"})
+                with urllib.request.urlopen(req, timeout=3.5) as resp:
+                    return json.loads(resp.read().decode("utf-8")).get("results", [])
+            except Exception:
+                return []
+
+        raw_items = []
+        with ThreadPoolExecutor(max_workers=5) as ex:
+            for chunk in ex.map(fetch_artist, batch_artists):
+                raw_items.extend(chunk[:4])
+
+    if item_type == "albums":
+        seen = set()
+        for item in raw_items:
+            col_id = str(item.get("collectionId") or "")
+            if not col_id or col_id in seen:
+                continue
+            seen.add(col_id)
+            album_id = f"itunes-album-{col_id}"
+            artwork = (item.get("artworkUrl100") or "").replace("100x100bb", "600x600bb")
+            rd = item.get("releaseDate", "2020")
+            year = int(rd[:4]) if rd and rd[:4].isdigit() else 2020
+            results.append(
+                {
+                    "id": album_id,
+                    "title": item.get("collectionName", "Unknown Album"),
+                    "artist": item.get("artistName", "Unknown Artist"),
+                    "release_year": year,
+                    "genre": item.get("primaryGenreName", "Music"),
+                    "track_count": item.get("trackCount", 10),
+                    "cover_url": artwork,
+                    "external_url": col_id,
+                }
+            )
+        if results:
+            conn = get_db()
+            try:
+                cur = conn.cursor()
+                for a in results:
+                    cur.execute(
+                        """
+                        INSERT OR IGNORE INTO albums (id, title, artist, release_year, genre, track_count, cover_url, external_url)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (a["id"], a["title"], a["artist"], a["release_year"], a["genre"], a["track_count"], a["cover_url"], a["external_url"]),
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+        return enrich_albums_with_stats(results)
+
+    # Tracks mode
+    seen = set()
+    for item in raw_items:
+        tid_raw = item.get("trackId")
+        if not tid_raw or tid_raw in seen:
+            continue
+        seen.add(tid_raw)
+        track_id = f"itunes-{tid_raw}"
+        artwork = (item.get("artworkUrl100") or "").replace("100x100bb", "600x600bb")
+        rd = item.get("releaseDate", "2020")
+        year = int(rd[:4]) if rd and rd[:4].isdigit() else 2020
+        dur_sec = int(item.get("trackTimeMillis", 210000) / 1000)
+        results.append(
+            {
+                "id": track_id,
+                "title": item.get("trackName", "Unknown Track"),
+                "artist": item.get("artistName", "Unknown Artist"),
+                "album": item.get("collectionName", "Single"),
+                "release_year": year,
+                "genre": item.get("primaryGenreName", "Music"),
+                "duration_sec": dur_sec,
+                "cover_url": artwork,
+                "preview_url": item.get("previewUrl", ""),
+                "external_url": item.get("trackViewUrl", ""),
+                "source": "discover-scroll",
+            }
+        )
+    if results:
+        conn = get_db()
+        try:
+            cur = conn.cursor()
+            for t in results:
+                cur.execute(
+                    """
+                    INSERT OR IGNORE INTO tracks (id, title, artist, album, release_year, genre, duration_sec, cover_url, preview_url, external_url, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (t["id"], t["title"], t["artist"], t["album"], t["release_year"], t["genre"], t["duration_sec"], t["cover_url"], t["preview_url"], t["external_url"], t["source"]),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    return enrich_tracks_with_stats(results)
+
+
 def get_album_with_tracklist(album_id: str):
     conn = get_db()
     row = None
@@ -1568,8 +1717,18 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
                 q = qs.get("q", [""])[0].strip()
                 if not q:
                     return self._send_json({"results": []})
-                results = search_music_catalog(q, limit=12)
+                results = search_music_catalog(q, limit=24)
                 return self._send_json({"results": results})
+
+            if path == "/api/discover/more":
+                item_type = qs.get("type", ["tracks"])[0].strip()
+                try:
+                    page = int(qs.get("page", ["0"])[0])
+                except (TypeError, ValueError):
+                    page = 0
+                q = qs.get("q", [""])[0].strip()
+                items = discover_more_catalog(item_type=item_type, page=page, query=q)
+                return self._send_json({"results": items, "page": page})
 
             if path == "/api/track":
                 tid = qs.get("id", [""])[0].strip()
@@ -1637,7 +1796,7 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
                 q = qs.get("q", [""])[0].strip()
                 if not q:
                     return self._send_json({"results": []})
-                results = search_albums_catalog(q, limit=12)
+                results = search_albums_catalog(q, limit=24)
                 return self._send_json({"results": results})
 
             return super().do_GET()

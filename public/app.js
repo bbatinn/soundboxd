@@ -214,36 +214,36 @@ function renderTopFour() {
     .join("");
 }
 
-function renderTracksGrid(tracks, targetId = "tracksGrid") {
-  const grid = document.getElementById(targetId);
-  if (!grid) return;
-  if (!tracks || tracks.length === 0) {
-    grid.innerHTML = `<p style="color:var(--text-secondary);">No tracks found yet. Use the search bar above to find any song.</p>`;
-    return;
-  }
+let displayedTrackKeys = new Set();
+let displayedAlbumKeys = new Set();
+let tracksScrollPage = 0;
+let albumsScrollPage = 0;
+let tracksScrollLoading = false;
+let albumsScrollLoading = false;
+let currentTracksQuery = "";
+let currentAlbumsQuery = "";
 
-  grid.innerHTML = tracks
-    .map((t) => {
-      const avg = t.avg_rating && t.avg_rating > 0 ? `${t.avg_rating.toFixed(1)} ★` : "New";
-      return `
+function trackCardHtml(t) {
+  const avg = t.avg_rating && t.avg_rating > 0 ? `${t.avg_rating.toFixed(1)} ★` : "New";
+  return `
       <div class="track-card">
-        <div class="poster-wrap" onclick="openTrackModal('${t.id}')">
-          <img src="${t.cover_url}" alt="${t.title}" loading="lazy" onerror="this.src='https://placehold.co/400x400/1b2228/00e054?text=Larpmaxxing'" />
+        <div class="poster-wrap" onclick="openTrackModal('${escapeHtml(t.id)}')">
+          <img src="${t.cover_url}" alt="${escapeHtml(t.title)}" loading="lazy" onerror="this.src='https://placehold.co/400x400/1b2228/00e054?text=Larpmaxxing'" />
           <span class="rating-pill-corner">${avg}</span>
           <div class="poster-overlay">
             <div class="overlay-actions">
-              <button class="btn-overlay" onclick="event.stopPropagation(); quickPlayPreview('${t.id}')">
+              <button class="btn-overlay" onclick="event.stopPropagation(); quickPlayPreview('${escapeHtml(t.id)}')">
                 ▶ Preview
               </button>
-              <button class="btn-overlay" onclick="event.stopPropagation(); openTrackModal('${t.id}')">
+              <button class="btn-overlay" onclick="event.stopPropagation(); openTrackModal('${escapeHtml(t.id)}')">
                 ★ Rate
               </button>
             </div>
           </div>
         </div>
-        <div class="card-info" onclick="openTrackModal('${t.id}')">
-          <div class="card-title" title="${t.title}">${t.title}</div>
-          <div class="card-artist" title="${t.artist}">${t.artist}</div>
+        <div class="card-info" onclick="openTrackModal('${escapeHtml(t.id)}')">
+          <div class="card-title" title="${escapeHtml(t.title)}">${escapeHtml(t.title)}</div>
+          <div class="card-artist" title="${escapeHtml(t.artist)}">${escapeHtml(t.artist)}</div>
           <div class="card-meta-row">
             <span>${t.release_year || ""}</span>
             <span>💬 ${t.review_count || 0} • ♥ ${t.likes_count || 0}</span>
@@ -251,8 +251,68 @@ function renderTracksGrid(tracks, targetId = "tracksGrid") {
         </div>
       </div>
     `;
-    })
-    .join("");
+}
+
+function renderTracksGrid(tracks, targetId = "tracksGrid", append = false) {
+  const grid = document.getElementById(targetId);
+  if (!grid) return;
+
+  if (targetId === "tracksGrid" && !append) {
+    displayedTrackKeys.clear();
+  }
+
+  if (!append && (!tracks || tracks.length === 0)) {
+    grid.innerHTML = `<p style="color:var(--text-secondary);">No tracks found yet. Use the search bar above to find any song.</p>`;
+    return;
+  }
+
+  const toRender = [];
+  for (const t of tracks || []) {
+    if (targetId === "tracksGrid") {
+      const sig = `${(t.title || "").toLowerCase()}|${(t.artist || "").toLowerCase()}`;
+      if (displayedTrackKeys.has(t.id) || displayedTrackKeys.has(sig)) continue;
+      displayedTrackKeys.add(t.id);
+      displayedTrackKeys.add(sig);
+    }
+    toRender.push(t);
+  }
+
+  const html = toRender.map(trackCardHtml).join("");
+  if (append) {
+    grid.insertAdjacentHTML("beforeend", html);
+  } else {
+    grid.innerHTML = html;
+  }
+}
+
+async function loadMoreTracks() {
+  if (tracksScrollLoading || currentTracksQuery === "__TOP__") return;
+  const discoverPanel = document.getElementById("tab-discover");
+  if (!discoverPanel || !discoverPanel.classList.contains("active")) return;
+
+  tracksScrollLoading = true;
+  const loadingEl = document.getElementById("tracksLoadingText");
+  if (loadingEl) loadingEl.style.display = "inline-block";
+
+  try {
+    const page = tracksScrollPage++;
+    const res = await fetch(`/api/discover/more?type=tracks&page=${page}&q=${encodeURIComponent(currentTracksQuery)}`);
+    if (res.ok) {
+      const data = await res.json();
+      const items = data.results || [];
+      if (items.length > 0) {
+        const existingIds = new Set(appState.tracks.map((t) => t.id));
+        items.forEach((it) => {
+          if (!existingIds.has(it.id)) appState.tracks.push(it);
+        });
+        renderTracksGrid(items, "tracksGrid", true);
+      }
+    }
+  } catch (_) {
+  } finally {
+    tracksScrollLoading = false;
+    if (loadingEl) loadingEl.style.display = "none";
+  }
 }
 
 function renderRecentReviews() {
@@ -359,11 +419,15 @@ function renderCustomLists() {
 async function performLiveSearch(query) {
   cancelSuggestionsAndHide();
   if (!query || !query.trim()) {
+    currentTracksQuery = "";
+    tracksScrollPage = 0;
     document.getElementById("tracksGridTitle").textContent = "POPULAR TRACKS";
     renderTracksGrid(appState.tracks);
     return;
   }
 
+  currentTracksQuery = query.trim();
+  tracksScrollPage = 0;
   switchTab("discover");
   const titleEl = document.getElementById("tracksGridTitle");
   titleEl.textContent = `SEARCHING CATALOG FOR "${query}"...`;
@@ -422,9 +486,12 @@ function filterTracks(mode, btnEl) {
   if (btnEl) btnEl.classList.add("active");
 
   if (mode === "top") {
+    currentTracksQuery = "__TOP__";
     document.getElementById("tracksGridTitle").textContent = "HIGHEST RATED TRACKS (4.5★+)";
     renderTracksGrid(appState.tracks.filter((t) => (t.avg_rating || 0) >= 4.5));
   } else {
+    currentTracksQuery = "";
+    tracksScrollPage = 0;
     document.getElementById("tracksGridTitle").textContent = "POPULAR TRACKS";
     renderTracksGrid(appState.tracks);
   }
@@ -875,6 +942,8 @@ async function loadAlbums(btnEl) {
   if (btnEl) {
     document.querySelectorAll("#tab-albums .filter-bar .chip").forEach((b) => b.classList.remove("active"));
     btnEl.classList.add("active");
+    currentAlbumsQuery = "";
+    albumsScrollPage = 0;
   }
   if (appState.backendAvailable) {
     try {
@@ -883,21 +952,12 @@ async function loadAlbums(btnEl) {
       appState.albums = data.albums || [];
     } catch (_) {}
   }
-  renderAlbumsGrid(appState.albums);
+  renderAlbumsGrid(appState.albums, false);
 }
 
-function renderAlbumsGrid(albums) {
-  const grid = document.getElementById("albumsGrid");
-  if (!grid) return;
-  if (!albums || albums.length === 0) {
-    grid.innerHTML = `<p style="color:var(--text-secondary);">No albums found.</p>`;
-    return;
-  }
-
-  grid.innerHTML = albums
-    .map((a) => {
-      const avg = a.avg_rating && a.avg_rating > 0 ? `${a.avg_rating.toFixed(1)} ★` : "New";
-      return `
+function albumCardHtml(a) {
+  const avg = a.avg_rating && a.avg_rating > 0 ? `${a.avg_rating.toFixed(1)} ★` : "New";
+  return `
       <div class="track-card">
         <div class="poster-wrap" onclick="openAlbumModal('${escapeHtml(a.id)}')">
           <img src="${a.cover_url}" alt="${escapeHtml(a.title)}" loading="lazy" onerror="this.src='https://placehold.co/400x400/1b2228/00e054?text=Album'" />
@@ -920,8 +980,64 @@ function renderAlbumsGrid(albums) {
         </div>
       </div>
     `;
-    })
-    .join("");
+}
+
+function renderAlbumsGrid(albums, append = false) {
+  const grid = document.getElementById("albumsGrid");
+  if (!grid) return;
+  if (!append) {
+    displayedAlbumKeys.clear();
+  }
+  if (!append && (!albums || albums.length === 0)) {
+    grid.innerHTML = `<p style="color:var(--text-secondary);">No albums found.</p>`;
+    return;
+  }
+
+  const toRender = [];
+  for (const a of albums || []) {
+    const sig = `${(a.title || "").toLowerCase()}|${(a.artist || "").toLowerCase()}`;
+    if (displayedAlbumKeys.has(a.id) || displayedAlbumKeys.has(sig)) continue;
+    displayedAlbumKeys.add(a.id);
+    displayedAlbumKeys.add(sig);
+    toRender.push(a);
+  }
+
+  const html = toRender.map(albumCardHtml).join("");
+  if (append) {
+    grid.insertAdjacentHTML("beforeend", html);
+  } else {
+    grid.innerHTML = html;
+  }
+}
+
+async function loadMoreAlbums() {
+  if (albumsScrollLoading) return;
+  const albumsPanel = document.getElementById("tab-albums");
+  if (!albumsPanel || !albumsPanel.classList.contains("active")) return;
+
+  albumsScrollLoading = true;
+  const loadingEl = document.getElementById("albumsLoadingText");
+  if (loadingEl) loadingEl.style.display = "inline-block";
+
+  try {
+    const page = albumsScrollPage++;
+    const res = await fetch(`/api/discover/more?type=albums&page=${page}&q=${encodeURIComponent(currentAlbumsQuery)}`);
+    if (res.ok) {
+      const data = await res.json();
+      const items = data.results || [];
+      if (items.length > 0) {
+        const existingIds = new Set(appState.albums.map((a) => a.id));
+        items.forEach((it) => {
+          if (!existingIds.has(it.id)) appState.albums.push(it);
+        });
+        renderAlbumsGrid(items, true);
+      }
+    }
+  } catch (_) {
+  } finally {
+    albumsScrollLoading = false;
+    if (loadingEl) loadingEl.style.display = "none";
+  }
 }
 
 async function searchAlbumsDirect(query, btnEl) {
@@ -929,11 +1045,13 @@ async function searchAlbumsDirect(query, btnEl) {
     document.querySelectorAll("#tab-albums .filter-bar .chip").forEach((b) => b.classList.remove("active"));
     btnEl.classList.add("active");
   }
+  currentAlbumsQuery = query || "";
+  albumsScrollPage = 0;
   if (appState.backendAvailable) {
     const res = await fetch(`/api/albums/search?q=${encodeURIComponent(query)}`);
     const data = await res.json();
     if (data.results) {
-      renderAlbumsGrid(data.results);
+      renderAlbumsGrid(data.results, false);
     }
   }
 }
@@ -1163,7 +1281,7 @@ function switchTab(tabName) {
   if (btn) btn.classList.add("active");
 
   if (tabName === "albums") {
-    loadAlbums();
+    loadAlbums().then(() => loadMoreAlbums());
   }
 }
 
@@ -1432,5 +1550,42 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  loadBootstrap();
+  // Infinite scroll via IntersectionObserver + scroll listener fallback
+  const tracksSentinel = document.getElementById("tracksInfiniteSentinel");
+  const albumsSentinel = document.getElementById("albumsInfiniteSentinel");
+  if ("IntersectionObserver" in window) {
+    const obs = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            if (entry.target.id === "tracksInfiniteSentinel") loadMoreTracks();
+            if (entry.target.id === "albumsInfiniteSentinel") loadMoreAlbums();
+          }
+        });
+      },
+      { rootMargin: "500px" }
+    );
+    if (tracksSentinel) obs.observe(tracksSentinel);
+    if (albumsSentinel) obs.observe(albumsSentinel);
+  }
+
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (tracksSentinel) {
+        const rect = tracksSentinel.getBoundingClientRect();
+        if (rect.top < window.innerHeight + 500) loadMoreTracks();
+      }
+      if (albumsSentinel) {
+        const rect = albumsSentinel.getBoundingClientRect();
+        if (rect.top < window.innerHeight + 500) loadMoreAlbums();
+      }
+    },
+    { passive: true }
+  );
+
+  loadBootstrap().then(() => {
+    // Immediately load the first discovery batch so the initial grid is extra rich
+    loadMoreTracks();
+  });
 });
