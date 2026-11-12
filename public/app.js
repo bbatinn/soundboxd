@@ -388,24 +388,66 @@ function renderListenlist() {
 function renderCustomLists() {
   const container = document.getElementById("customListsContainer");
   if (!container) return;
-  container.innerHTML = (appState.custom_lists || [])
+
+  if (!appState.custom_lists || appState.custom_lists.length === 0) {
+    container.innerHTML = `
+      <div class="lists-empty-state">
+        <div style="font-size:2.2rem;margin-bottom:8px;">📁</div>
+        <h3 style="color:#fff;font-size:1.15rem;margin-bottom:6px;">No Curated Lists Yet</h3>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px;">Create your first Letterboxd-style track list to share your favorite songs and albums.</p>
+        <button type="button" class="btn-primary" onclick="openCreateListModal()" style="padding:9px 20px;font-size:0.88rem;cursor:pointer;">+ Create New List</button>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = appState.custom_lists
     .map((lst) => {
       const strip = (lst.tracks || [])
-        .slice(0, 5)
+        .slice(0, 6)
         .map((t) => `<img src="${t.cover_url}" alt="${escapeHtml(t.title)}" title="${escapeHtml(t.title)} - ${escapeHtml(t.artist)}" onclick="openTrackModal('${t.id}')" style="cursor:pointer;" />`)
         .join("");
+      const safeTitle = escapeHtml(lst.title || "Untitled List");
       return `
-      <div class="list-card">
-        <h3>${escapeHtml(lst.title)}</h3>
-        <p style="font-size:0.83rem;color:var(--text-secondary);margin-top:4px;">${escapeHtml(lst.description || "")}</p>
-        <div class="list-posters-strip">${strip}</div>
-        <div style="font-size:0.74rem;color:var(--text-muted);">
-          Curated by <strong>@${escapeHtml(lst.created_by || "batin")}</strong> • ${(lst.tracks || []).length} tracks
+      <div class="list-card" id="listCard_${lst.id}">
+        <div class="list-card-header">
+          <h3 class="list-card-title">${safeTitle}</h3>
+          <button type="button" class="btn-delete-list" title="Delete list" onclick="confirmDeleteList(${lst.id}, '${safeTitle.replace(/'/g, "\\'")}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            <span>Delete</span>
+          </button>
+        </div>
+        <p class="list-card-desc">${escapeHtml(lst.description || "")}</p>
+        <div class="list-posters-strip">${strip || '<span style="font-size:0.75rem;color:var(--text-muted);">Empty list</span>'}</div>
+        <div class="list-card-footer">
+          Curated by <strong>@${escapeHtml(lst.created_by || "batin")}</strong> • ${(lst.tracks || []).length} track${(lst.tracks || []).length === 1 ? '' : 's'}
         </div>
       </div>
     `;
     })
     .join("");
+}
+
+async function confirmDeleteList(listId, listTitle) {
+  if (!confirm(`Are you sure you want to delete the list "${listTitle}"?`)) {
+    return;
+  }
+  try {
+    const res = await fetch("/api/lists/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: listId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.ok) {
+      showToast(`✓ List "${listTitle}" deleted.`);
+      await loadBootstrap();
+    } else {
+      showToast(data.error || "Failed to delete list.");
+    }
+  } catch (err) {
+    showToast("Network error deleting list.");
+  }
 }
 
 // ============================================================================

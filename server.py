@@ -1993,6 +1993,19 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
                     conn.close()
                 return self._send_json({"ok": True})
 
+            if path == "/api/lists/delete":
+                list_id = body.get("id")
+                if not list_id:
+                    return self._send_json({"error": "List id is required"}, 400)
+                conn = get_db()
+                try:
+                    cur = conn.cursor()
+                    cur.execute("DELETE FROM custom_lists WHERE id = ?", (list_id,))
+                    conn.commit()
+                finally:
+                    conn.close()
+                return self._send_json({"ok": True, "message": "List deleted successfully"})
+
             if path == "/api/ai/route":
                 task_type = body.get("task_type", "moderate_and_tag")
                 payload = body.get("payload", {})
