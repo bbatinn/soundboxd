@@ -1604,3 +1604,53 @@ body {
   color: #000;
 }
 
+/* MOBILE & PWA RESPONSIVE OPTIMIZATIONS */
+@media (max-width: 720px) {
+  .nav-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .search-box {
+    max-width: 100%;
+  }
+  .nav-links {
+    justify-content: space-between;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 2px;
+  }
+  .nav-tab {
+    white-space: nowrap;
+    font-size: 0.72rem;
+    padding: 7px 9px;
+  }
+  .poster-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .hero-copy h1 {
+    font-size: 1.55rem;
+  }
+  .audio-bar-inner {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .audio-track-info {
+    max-width: 75%;
+  }
+  .player-controls-center {
+    order: 3;
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+  .player-controls-right .player-volume-slider,
+  .player-controls-right #playerMuteBtn {
+    display: none;
+  }
+  .player-controls-right {
+    min-width: auto;
+  }
+}
+
+

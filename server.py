@@ -2073,8 +2073,8 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
 
 def run_server():
     init_db()
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), SoundboxdHandler)
-    print(f"Soundboxd calisiyor -> http://localhost:{PORT}")
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), SoundboxdHandler)
+    print(f"Larpmaxxing running -> http://0.0.0.0:{PORT}")
     server.serve_forever()
 
 
