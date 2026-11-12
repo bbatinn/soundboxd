@@ -961,78 +961,208 @@ async function assistSimilarWithPro() {
 }
 
 // ============================================================================
-// CUSTOM LISTS MODAL (with Live Catalog Search)
+// CUSTOM LISTS MODAL (Modern Interactive Track Picker & Selected Shelf)
 // ============================================================================
 let listModalSelectedTracks = new Map();
+let listModalPool = new Map();
+let listModalCurrentCandidates = [];
 let listSearchTimer = null;
 
-function renderListModalCheckboxes(candidateTracks) {
-  const box = document.getElementById("newListTrackCheckboxes");
-  if (!box) return;
-  const combined = [];
-  const seen = new Set();
-  for (const [, tr] of listModalSelectedTracks.entries()) {
-    combined.push(tr);
-    seen.add(tr.id);
+function updateListSelectedTray() {
+  const count = listModalSelectedTracks.size;
+  const countBadge = document.getElementById("listSelectedCountBadge");
+  if (countBadge) {
+    countBadge.textContent = `${count} track${count === 1 ? "" : "s"}`;
   }
-  for (const t of candidateTracks || []) {
-    if (!seen.has(t.id)) {
-      combined.push(t);
-      seen.add(t.id);
-    }
+  const submitBtn = document.getElementById("newListSubmitBtn");
+  if (submitBtn) {
+    submitBtn.textContent = `Create List (${count} Track${count === 1 ? "" : "s"})`;
   }
-  box.innerHTML = combined
+
+  const tray = document.getElementById("listSelectedChipsContainer");
+  if (!tray) return;
+
+  if (count === 0) {
+    tray.innerHTML = `<span class="list-empty-tray-msg">No tracks added yet. Search and pick songs below.</span>`;
+    return;
+  }
+
+  tray.innerHTML = Array.from(listModalSelectedTracks.values())
     .map((t) => {
-      const isChecked = listModalSelectedTracks.has(t.id) ? "checked" : "";
+      const cover = t.cover_url || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300";
+      const safeTitle = escapeHtml(t.title || "Untitled");
+      const safeArtist = escapeHtml(t.artist || "Unknown");
+      const tid = escapeHtml(t.id);
       return `
-      <label class="checkbox-track-item">
-        <input type="checkbox" name="listTrack" value="${escapeHtml(t.id)}" ${isChecked} onchange="toggleListModalTrack('${escapeHtml(t.id)}', this.checked)" />
-        <span><strong>${escapeHtml(t.title)}</strong> — ${escapeHtml(t.artist)}</span>
-      </label>
-    `;
+        <div class="list-selected-chip" title="${safeTitle} — ${safeArtist}">
+          <img class="chip-cover" src="${cover}" alt="${safeTitle}" onerror="this.src='https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300'" />
+          <div class="chip-text">
+            <span class="chip-title">${safeTitle}</span>
+            <span class="chip-artist">${safeArtist}</span>
+          </div>
+          <button type="button" class="chip-remove-btn" title="Remove track" onclick="event.stopPropagation(); removeTrackFromListModal('${tid}')">✕</button>
+        </div>
+      `;
     })
     .join("");
 }
 
-let listModalPool = new Map();
+function renderListModalCheckboxes(candidateTracks) {
+  const box = document.getElementById("newListTrackCheckboxes");
+  if (!box) return;
 
-function toggleListModalTrack(trackId, checked) {
-  if (checked) {
+  listModalCurrentCandidates = candidateTracks || [];
+  if (listModalCurrentCandidates.length === 0) {
+    box.innerHTML = `<div class="list-picker-empty">No matching tracks found. Try searching for another artist or song.</div>`;
+    return;
+  }
+
+  box.innerHTML = listModalCurrentCandidates
+    .map((t) => {
+      const isSelected = listModalSelectedTracks.has(t.id);
+      const cover = t.cover_url || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300";
+      const safeTitle = escapeHtml(t.title || "Untitled Track");
+      const safeArtist = escapeHtml(t.artist || "Unknown Artist");
+      const safeAlbum = escapeHtml(t.album || "");
+      const previewUrl = t.preview_url || "";
+      const tid = escapeHtml(t.id);
+
+      return `
+        <div class="list-picker-card ${isSelected ? "is-selected" : ""}" id="listPickerCard_${tid}" onclick="toggleListModalTrack('${tid}')">
+          <div class="list-picker-cover-wrap">
+            <img class="list-picker-cover" src="${cover}" alt="${safeTitle}" onerror="this.src='https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300'" />
+            ${
+              previewUrl
+                ? `<button type="button" class="list-picker-play-btn" title="Play 30s preview" onclick="event.stopPropagation(); quickPlayPreviewDirect('${escapeHtml(previewUrl)}', '${safeTitle}', '${safeArtist}', '${escapeHtml(cover)}')">▶</button>`
+                : ""
+            }
+          </div>
+          <div class="list-picker-info">
+            <div class="list-picker-title" title="${safeTitle}">${safeTitle}</div>
+            <div class="list-picker-artist" title="${safeArtist}">
+              ${safeArtist} ${safeAlbum ? `• <span class="list-picker-album">${safeAlbum}</span>` : ""}
+            </div>
+          </div>
+          <button type="button" class="list-picker-btn ${isSelected ? "is-added" : ""}" id="listPickerBtn_${tid}" onclick="event.stopPropagation(); toggleListModalTrack('${tid}')">
+            ${isSelected ? "✓ Added" : "+ Add"}
+          </button>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function toggleListModalTrack(trackId) {
+  if (listModalSelectedTracks.has(trackId)) {
+    listModalSelectedTracks.delete(trackId);
+  } else {
     const tr = listModalPool.get(trackId) || appState.tracks.find((x) => x.id === trackId);
     if (tr) listModalSelectedTracks.set(trackId, tr);
-  } else {
-    listModalSelectedTracks.delete(trackId);
   }
+
+  // Update card UI state without destroying scroll position
+  const card = document.getElementById(`listPickerCard_${trackId}`);
+  const btn = document.getElementById(`listPickerBtn_${trackId}`);
+  const isSelected = listModalSelectedTracks.has(trackId);
+  if (card) card.classList.toggle("is-selected", isSelected);
+  if (btn) {
+    btn.classList.toggle("is-added", isSelected);
+    btn.textContent = isSelected ? "✓ Added" : "+ Add";
+  }
+
+  updateListSelectedTray();
+}
+
+function removeTrackFromListModal(trackId) {
+  listModalSelectedTracks.delete(trackId);
+  const card = document.getElementById(`listPickerCard_${trackId}`);
+  const btn = document.getElementById(`listPickerBtn_${trackId}`);
+  if (card) card.classList.remove("is-selected");
+  if (btn) {
+    btn.classList.remove("is-added");
+    btn.textContent = "+ Add";
+  }
+  updateListSelectedTray();
 }
 
 function searchTracksForListModal(query) {
   clearTimeout(listSearchTimer);
   const q = (query || "").trim();
+  const clearBtn = document.getElementById("listSearchClearBtn");
+  if (clearBtn) clearBtn.classList.toggle("hidden", !q);
+
+  const statusEl = document.getElementById("listCatalogStatus");
+
   if (!q) {
+    if (statusEl) statusEl.textContent = "Library Tracks";
     renderListModalCheckboxes(appState.tracks);
     return;
   }
+
+  if (statusEl) statusEl.textContent = "Searching catalog...";
+
   const local = appState.tracks.filter(
-    (t) => (t.title || "").toLowerCase().includes(q.toLowerCase()) || (t.artist || "").toLowerCase().includes(q.toLowerCase())
+    (t) =>
+      (t.title || "").toLowerCase().includes(q.toLowerCase()) ||
+      (t.artist || "").toLowerCase().includes(q.toLowerCase()) ||
+      (t.album || "").toLowerCase().includes(q.toLowerCase())
   );
   renderListModalCheckboxes(local);
+
   listSearchTimer = setTimeout(async () => {
     try {
       const res = await fetch(`/api/suggest?q=${encodeURIComponent(q)}`);
       const data = await res.json();
       const songs = data.songs || [];
       songs.forEach((s) => listModalPool.set(s.id, s));
-      renderListModalCheckboxes([...local, ...songs]);
-    } catch (_) {}
-  }, 140);
+
+      const combined = [...local];
+      const seen = new Set(local.map((x) => x.id));
+      for (const s of songs) {
+        if (!seen.has(s.id)) {
+          combined.push(s);
+          seen.add(s.id);
+        }
+      }
+
+      if (statusEl) {
+        statusEl.textContent = `${combined.length} results found`;
+      }
+      renderListModalCheckboxes(combined);
+    } catch (_) {
+      if (statusEl) statusEl.textContent = "Live search unavailable";
+    }
+  }, 130);
+}
+
+function clearListModalSearch() {
+  const searchEl = document.getElementById("listTrackSearchInput");
+  if (searchEl) searchEl.value = "";
+  const clearBtn = document.getElementById("listSearchClearBtn");
+  if (clearBtn) clearBtn.classList.add("hidden");
+  const statusEl = document.getElementById("listCatalogStatus");
+  if (statusEl) statusEl.textContent = "Library Tracks";
+  renderListModalCheckboxes(appState.tracks);
 }
 
 function openCreateListModal() {
   listModalSelectedTracks.clear();
   listModalPool.clear();
   appState.tracks.forEach((t) => listModalPool.set(t.id, t));
+
+  const titleEl = document.getElementById("newListTitle");
+  if (titleEl) titleEl.value = "";
+  const descEl = document.getElementById("newListDesc");
+  if (descEl) descEl.value = "";
+
   const searchEl = document.getElementById("listTrackSearchInput");
   if (searchEl) searchEl.value = "";
+  const clearBtn = document.getElementById("listSearchClearBtn");
+  if (clearBtn) clearBtn.classList.add("hidden");
+  const statusEl = document.getElementById("listCatalogStatus");
+  if (statusEl) statusEl.textContent = "Library Tracks";
+
+  updateListSelectedTray();
   renderListModalCheckboxes(appState.tracks);
   document.getElementById("listModal").classList.remove("hidden");
 }
@@ -1045,17 +1175,31 @@ async function submitNewList(e) {
   e.preventDefault();
   const title = document.getElementById("newListTitle").value.trim();
   const description = document.getElementById("newListDesc").value.trim();
+
+  if (listModalSelectedTracks.size === 0) {
+    showToast("Please select at least 1 track to create your list!");
+    return;
+  }
+
   const checked = Array.from(listModalSelectedTracks.keys());
   const tracksMeta = Array.from(listModalSelectedTracks.values());
 
   if (appState.backendAvailable) {
-    await fetch("/api/lists/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, description, track_ids: checked, tracks_meta: tracksMeta }),
-    });
-    showToast(`✓ Created list "${title}" with ${checked.length} tracks!`);
-    await loadBootstrap();
+    try {
+      const res = await fetch("/api/lists/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, description, track_ids: checked, tracks_meta: tracksMeta }),
+      });
+      if (res.ok) {
+        showToast(`✓ Created list "${title}" with ${checked.length} tracks!`);
+        await loadBootstrap();
+      } else {
+        showToast("Error creating list, please try again.");
+      }
+    } catch (err) {
+      showToast("Network error creating list.");
+    }
   }
   closeCreateListModal();
 }

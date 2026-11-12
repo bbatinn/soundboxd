@@ -380,18 +380,70 @@
 
   <!-- MODAL: CREATE CUSTOM LIST -->
   <div id="listModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeCreateListModal()">
-    <div class="modal-card modal-small">
+    <div class="modal-card modal-list-creator">
       <button class="modal-close" onclick="closeCreateListModal()">✕</button>
-      <h2>Create New Track List</h2>
-      <form onsubmit="submitNewList(event)" class="log-form">
-        <label>LIST TITLE</label>
-        <input type="text" id="newListTitle" required placeholder="e.g., Late Night Highway Drives" />
-        <label>DESCRIPTION</label>
-        <textarea id="newListDesc" rows="2" placeholder="What is the story or mood behind this list?"></textarea>
-        <label>SELECT OR SEARCH TRACKS TO INCLUDE</label>
-        <input type="text" id="listTrackSearchInput" placeholder="Search any song or artist from live catalog..." oninput="searchTracksForListModal(this.value)" style="margin-bottom:6px;" />
-        <div id="newListTrackCheckboxes" class="checkbox-track-list"></div>
-        <button type="submit" class="btn-save-log mt-small">Create List</button>
+      <div class="modal-header-compact">
+        <h2>Create New Track List</h2>
+        <p class="modal-subheading">Curate a themed playlist, soundtrack, or personal mixtape.</p>
+      </div>
+
+      <form onsubmit="submitNewList(event)" class="list-creator-form">
+        <!-- List Metadata Fields -->
+        <div class="list-meta-grid">
+          <div class="form-group">
+            <label for="newListTitle">LIST TITLE</label>
+            <input type="text" id="newListTitle" class="form-input" required placeholder="e.g., Late Night Highway Drives" />
+          </div>
+          <div class="form-group">
+            <label for="newListDesc">DESCRIPTION</label>
+            <textarea id="newListDesc" class="form-textarea" rows="2" placeholder="What is the story, vibe or mood behind this list?"></textarea>
+          </div>
+        </div>
+
+        <!-- Selected Tracks Tray -->
+        <div class="list-selected-section">
+          <div class="list-section-header">
+            <span>SELECTED TRACKS</span>
+            <span id="listSelectedCountBadge" class="list-count-badge">0 tracks</span>
+          </div>
+          <div id="listSelectedChipsContainer" class="list-selected-tray">
+            <span class="list-empty-tray-msg">No tracks added yet. Search and pick songs below.</span>
+          </div>
+        </div>
+
+        <!-- Search & Catalog Picker -->
+        <div class="list-picker-section">
+          <div class="list-section-header">
+            <span>SELECT OR SEARCH TRACKS TO INCLUDE</span>
+            <span id="listCatalogStatus" class="list-catalog-status">Live Catalog</span>
+          </div>
+          <div class="list-search-wrap">
+            <span class="list-search-icon">🔍</span>
+            <input
+              type="text"
+              id="listTrackSearchInput"
+              class="list-search-input"
+              placeholder="Search by song title, artist, or album..."
+              oninput="searchTracksForListModal(this.value)"
+              autocomplete="off"
+            />
+            <button
+              type="button"
+              id="listSearchClearBtn"
+              class="list-search-clear hidden"
+              onclick="clearListModalSearch()"
+              title="Clear search"
+            >✕</button>
+          </div>
+
+          <div id="newListTrackCheckboxes" class="list-picker-scroll"></div>
+        </div>
+
+        <!-- Action Footer -->
+        <div class="list-creator-footer">
+          <button type="button" class="btn-cancel" onclick="closeCreateListModal()">Cancel</button>
+          <button type="submit" id="newListSubmitBtn" class="btn-save-log">Create List (0 Tracks)</button>
+        </div>
       </form>
     </div>
   </div>
