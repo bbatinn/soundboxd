@@ -500,11 +500,132 @@ function runLivePresetSearch(presetQuery, btnEl) {
 }
 
 // ============================================================================
-// AUDIO PREVIEW PLAYER (30-Second Legal Stream via Official Metadata)
+// AUDIO PREVIEW PLAYER (Custom Dark Player Bar with Play/Pause/Stop/Seek/Volume)
 // ============================================================================
+let currentPlayingTrackId = null;
+let currentPlayingUrl = "";
+let audioPlayerInitialized = false;
+
+function formatPlayerTime(seconds) {
+  const s = Math.max(0, Math.floor(seconds || 0));
+  const min = Math.floor(s / 60);
+  const sec = String(s % 60).padStart(2, "0");
+  return `${min}:${sec}`;
+}
+
+function syncPlayerButtonsUI() {
+  const audio = document.getElementById("audioElement");
+  const isPlaying = audio && !audio.paused && !audio.ended && Boolean(audio.src);
+
+  const playPauseBtn = document.getElementById("playerPlayPauseBtn");
+  if (playPauseBtn) {
+    playPauseBtn.textContent = isPlaying ? "⏸" : "▶";
+  }
+
+  const modalPlayBtn = document.getElementById("modalPlayBtn");
+  if (modalPlayBtn && appState.currentModalTrack) {
+    const isThisModalTrack =
+      currentPlayingTrackId === appState.currentModalTrack.id ||
+      (appState.currentModalTrack.preview_url && currentPlayingUrl === appState.currentModalTrack.preview_url);
+    if (isThisModalTrack && isPlaying) {
+      modalPlayBtn.textContent = "⏸ Pause Preview";
+    } else if (isThisModalTrack && audio && audio.paused && audio.currentTime > 0) {
+      modalPlayBtn.textContent = "▶ Resume Preview";
+    } else {
+      modalPlayBtn.textContent = "▶ Play Preview";
+    }
+  }
+}
+
+function initAudioElementListeners() {
+  if (audioPlayerInitialized) return;
+  const audio = document.getElementById("audioElement");
+  if (!audio) return;
+  audioPlayerInitialized = true;
+  audio.volume = 0.85;
+
+  audio.addEventListener("play", syncPlayerButtonsUI);
+  audio.addEventListener("pause", syncPlayerButtonsUI);
+  audio.addEventListener("ended", () => {
+    syncPlayerButtonsUI();
+    const seek = document.getElementById("playerSeekSlider");
+    if (seek) seek.value = 0;
+    const cur = document.getElementById("playerCurrentTime");
+    if (cur) cur.textContent = "0:00";
+  });
+  audio.addEventListener("loadedmetadata", () => {
+    const dur = audio.duration && isFinite(audio.duration) ? audio.duration : 30;
+    const seek = document.getElementById("playerSeekSlider");
+    if (seek) seek.max = dur;
+    const durEl = document.getElementById("playerDuration");
+    if (durEl) durEl.textContent = formatPlayerTime(dur);
+  });
+  audio.addEventListener("timeupdate", () => {
+    const seek = document.getElementById("playerSeekSlider");
+    if (seek) seek.value = audio.currentTime || 0;
+    const cur = document.getElementById("playerCurrentTime");
+    if (cur) cur.textContent = formatPlayerTime(audio.currentTime || 0);
+  });
+}
+
+function toggleAudioPlayPause() {
+  initAudioElementListeners();
+  const audio = document.getElementById("audioElement");
+  if (!audio || !audio.src) return;
+  if (audio.paused) {
+    audio.play().catch(() => {});
+  } else {
+    audio.pause();
+  }
+  syncPlayerButtonsUI();
+}
+
+function seekAudioPreview(val) {
+  const audio = document.getElementById("audioElement");
+  if (!audio || !audio.src) return;
+  audio.currentTime = parseFloat(val) || 0;
+}
+
+function setAudioVolume(val) {
+  const audio = document.getElementById("audioElement");
+  if (!audio) return;
+  const v = parseFloat(val);
+  audio.volume = v;
+  audio.muted = v === 0;
+  const muteBtn = document.getElementById("playerMuteBtn");
+  if (muteBtn) muteBtn.textContent = audio.muted ? "🔇" : "🔊";
+}
+
+function toggleAudioMute() {
+  const audio = document.getElementById("audioElement");
+  if (!audio) return;
+  audio.muted = !audio.muted;
+  const muteBtn = document.getElementById("playerMuteBtn");
+  if (muteBtn) muteBtn.textContent = audio.muted ? "🔇" : "🔊";
+}
+
+function openCurrentlyPlayingModal() {
+  if (currentPlayingTrackId) {
+    openTrackModal(currentPlayingTrackId);
+  }
+}
+
 async function quickPlayPreview(trackId) {
+  initAudioElementListeners();
   let track = appState.tracks.find((t) => t.id === trackId);
+  if (!track && appState.currentModalTrack && appState.currentModalTrack.id === trackId) {
+    track = appState.currentModalTrack;
+  }
   if (!track) return;
+
+  const audio = document.getElementById("audioElement");
+  const bar = document.getElementById("audioPlayerBar");
+
+  // If this exact track is already loaded in the player, toggle Play / Pause!
+  if (currentPlayingTrackId === track.id && audio.src && !bar.classList.contains("hidden")) {
+    toggleAudioPlayPause();
+    return;
+  }
 
   // If curated seed track doesn't have preview_url cached yet, fetch it on the fly from iTunes
   if (!track.preview_url) {
@@ -519,24 +640,32 @@ async function quickPlayPreview(trackId) {
   }
 
   if (!track.preview_url) {
-    alert("No 30s audio preview found for this track, but you can rate and review it from the detail page.");
+    showToast("No 30s audio preview available for this track.");
     return;
   }
 
-  const bar = document.getElementById("audioPlayerBar");
-  const audio = document.getElementById("audioElement");
+  currentPlayingTrackId = track.id;
+  currentPlayingUrl = track.preview_url;
   document.getElementById("playerCover").src = track.cover_url;
   document.getElementById("playerTitle").textContent = track.title;
-  document.getElementById("playerArtist").textContent = `${track.artist} • ${track.album}`;
+  document.getElementById("playerArtist").textContent = `${track.artist}${track.album ? " • " + track.album : ""}`;
   bar.classList.remove("hidden");
   audio.src = track.preview_url;
   audio.play().catch(() => {});
+  syncPlayerButtonsUI();
 }
 
 function stopAudioPreview() {
   const audio = document.getElementById("audioElement");
-  audio.pause();
-  document.getElementById("audioPlayerBar").classList.add("hidden");
+  if (audio) {
+    audio.pause();
+    audio.currentTime = 0;
+  }
+  currentPlayingTrackId = null;
+  currentPlayingUrl = "";
+  const bar = document.getElementById("audioPlayerBar");
+  if (bar) bar.classList.add("hidden");
+  syncPlayerButtonsUI();
 }
 
 // ============================================================================
@@ -571,6 +700,7 @@ async function openTrackModal(trackId) {
 
   renderModalHistogram(track);
   renderModalReviews(track);
+  syncPlayerButtonsUI();
 
   document.getElementById("trackModal").classList.remove("hidden");
 }
@@ -1145,18 +1275,28 @@ function rateTrackFromAlbum(trackId, title, previewUrl) {
 }
 
 function quickPlayPreviewDirect(url, title, artist, cover) {
+  initAudioElementListeners();
   if (!url) {
-    alert("No audio preview found for this track.");
+    showToast("No audio preview available for this track.");
     return;
   }
   const bar = document.getElementById("audioPlayerBar");
   const audio = document.getElementById("audioElement");
+
+  if (currentPlayingUrl === url && audio.src && !bar.classList.contains("hidden")) {
+    toggleAudioPlayPause();
+    return;
+  }
+
+  currentPlayingTrackId = null;
+  currentPlayingUrl = url;
   document.getElementById("playerCover").src = cover;
   document.getElementById("playerTitle").textContent = title;
   document.getElementById("playerArtist").textContent = `${artist}`;
   bar.classList.remove("hidden");
   audio.src = url;
   audio.play().catch(() => {});
+  syncPlayerButtonsUI();
 }
 
 function renderAlbumHistogram(hist) {
