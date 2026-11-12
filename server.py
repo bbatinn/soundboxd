@@ -433,63 +433,80 @@ _SUGGEST_CACHE = {}
 
 
 def get_search_suggestions(query: str):
-    """Fast typeahead: local matches + live iTunes songs/albums. No DB writes."""
+    """Fast typeahead: local matches + parallel live iTunes songs/albums. No DB writes."""
+    from concurrent.futures import ThreadPoolExecutor
+
     key = query.lower()
     cached = _SUGGEST_CACHE.get(key)
     if cached and time.time() - cached[0] < 600:
         return cached[1]
 
-    songs, albums, seen = [], [], set()
+    songs, albums, seen_songs, seen_albums = [], [], set(), set()
 
     conn = get_db()
     try:
         cur = conn.cursor()
         like = f"%{query}%"
         cur.execute(
-            "SELECT id, title, artist, cover_url FROM tracks WHERE title LIKE ? OR artist LIKE ? LIMIT 3",
+            "SELECT id, title, artist, album, cover_url, preview_url, genre, release_year FROM tracks WHERE title LIKE ? OR artist LIKE ? LIMIT 5",
             (like, like),
         )
         for r in cur.fetchall():
-            songs.append({"id": r["id"], "title": r["title"], "artist": r["artist"], "cover_url": r["cover_url"]})
-            seen.add((r["title"].lower(), r["artist"].lower()))
+            songs.append(dict(r))
+            seen_songs.add((r["title"].lower(), r["artist"].lower()))
+
+        cur.execute(
+            "SELECT id, title, artist, cover_url FROM albums WHERE title LIKE ? OR artist LIKE ? LIMIT 3",
+            (like, like),
+        )
+        for r in cur.fetchall():
+            albums.append(dict(r))
+            seen_albums.add((r["title"].lower(), r["artist"].lower()))
     finally:
         conn.close()
 
     def itunes(entity, limit):
-        url = f"https://itunes.apple.com/search?term={urllib.parse.quote(query)}&entity={entity}&limit={limit}"
-        req = urllib.request.Request(url, headers={"User-Agent": "SongLarp/1.0"})
-        with urllib.request.urlopen(req, timeout=4) as resp:
-            return json.loads(resp.read().decode("utf-8")).get("results", [])
+        try:
+            url = f"https://itunes.apple.com/search?term={urllib.parse.quote(query)}&entity={entity}&limit={limit}"
+            req = urllib.request.Request(url, headers={"User-Agent": "SongLarp/1.0"})
+            with urllib.request.urlopen(req, timeout=2.5) as resp:
+                return json.loads(resp.read().decode("utf-8")).get("results", [])
+        except Exception:
+            return []
 
-    try:
-        for it in itunes("song", 6):
-            sig = (it.get("trackName", "").lower(), it.get("artistName", "").lower())
-            if sig in seen or len(songs) >= 6:
-                continue
-            seen.add(sig)
-            songs.append({
-                "id": f"itunes-{it.get('trackId')}",
-                "title": it.get("trackName", ""),
-                "artist": it.get("artistName", ""),
-                "album": it.get("collectionName", ""),
-                "cover_url": it.get("artworkUrl100", "").replace("100x100bb", "300x300bb"),
-                "preview_url": it.get("previewUrl", ""),
-                "genre": it.get("primaryGenreName", ""),
-                "release_year": int(it["releaseDate"][:4]) if it.get("releaseDate", "")[:4].isdigit() else None,
-            })
-    except Exception:
-        pass
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        fut_songs = ex.submit(itunes, "song", 6)
+        fut_albums = ex.submit(itunes, "album", 4)
+        song_items = fut_songs.result()
+        album_items = fut_albums.result()
 
-    try:
-        for it in itunes("album", 4):
-            albums.append({
-                "id": f"itunes-album-{it.get('collectionId')}",
-                "title": it.get("collectionName", ""),
-                "artist": it.get("artistName", ""),
-                "cover_url": it.get("artworkUrl100", "").replace("100x100bb", "300x300bb"),
-            })
-    except Exception:
-        pass
+    for it in song_items:
+        sig = (it.get("trackName", "").lower(), it.get("artistName", "").lower())
+        if sig in seen_songs or len(songs) >= 6:
+            continue
+        seen_songs.add(sig)
+        songs.append({
+            "id": f"itunes-{it.get('trackId')}",
+            "title": it.get("trackName", ""),
+            "artist": it.get("artistName", ""),
+            "album": it.get("collectionName", ""),
+            "cover_url": it.get("artworkUrl100", "").replace("100x100bb", "300x300bb"),
+            "preview_url": it.get("previewUrl", ""),
+            "genre": it.get("primaryGenreName", ""),
+            "release_year": int(it["releaseDate"][:4]) if it.get("releaseDate", "")[:4].isdigit() else None,
+        })
+
+    for it in album_items:
+        sig = (it.get("collectionName", "").lower(), it.get("artistName", "").lower())
+        if sig in seen_albums or len(albums) >= 4:
+            continue
+        seen_albums.add(sig)
+        albums.append({
+            "id": f"itunes-album-{it.get('collectionId')}",
+            "title": it.get("collectionName", ""),
+            "artist": it.get("artistName", ""),
+            "cover_url": it.get("artworkUrl100", "").replace("100x100bb", "300x300bb"),
+        })
 
     result = {"songs": songs, "albums": albums}
     _SUGGEST_CACHE[key] = (time.time(), result)
@@ -1373,6 +1390,17 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
                         lst["tracks"] = lst_tracks
                         custom_lists.append(lst)
 
+                    cur.execute(
+                        """
+                        SELECT * FROM albums
+                        WHERE id LIKE 'album-%'
+                           OR id IN (SELECT album_id FROM album_reviews)
+                        ORDER BY CASE WHEN id LIKE 'album-%' THEN 0 ELSE 1 END, release_year DESC
+                        LIMIT 30
+                        """
+                    )
+                    boot_albums = enrich_albums_with_stats([dict(r) for r in cur.fetchall()])
+
                     # Token router telemetry summary
                     cur.execute(
                         """
@@ -1395,6 +1423,7 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
                 return self._send_json(
                     {
                         "tracks": tracks,
+                        "albums": boot_albums,
                         "reviews": reviews,
                         "favorites": favorites,
                         "listenlist": listenlist,
@@ -1407,7 +1436,7 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
 
             if path == "/api/suggest":
                 q = qs.get("q", [""])[0].strip()
-                if len(q) < 2:
+                if len(q) < 1:
                     return self._send_json({"songs": [], "albums": []})
                 return self._send_json(get_search_suggestions(q))
 

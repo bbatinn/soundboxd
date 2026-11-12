@@ -363,6 +363,7 @@ function renderCustomLists() {
 // SEARCH & FILTERS (Live iTunes Public Catalog + Local Ratings)
 // ============================================================================
 async function performLiveSearch(query) {
+  cancelSuggestionsAndHide();
   if (!query || !query.trim()) {
     document.getElementById("tracksGridTitle").textContent = "POPÜLER ŞARKILAR";
     renderTracksGrid(appState.tracks);
@@ -1067,12 +1068,15 @@ function switchTab(tabName) {
 }
 
 // ============================================================================
-// SEARCH SUGGESTIONS (typeahead dropdown under the search bar)
+// SEARCH SUGGESTIONS (instant real-time typeahead while typing)
 // ============================================================================
 let suggestTimer = null;
 let suggestSeq = 0;
+let suggestAbort = null;
 let suggestItems = [];
 let suggestActive = -1;
+let searchSubmitted = false;
+const clientSuggestCache = new Map();
 
 function hideSuggestions() {
   const box = document.getElementById("searchSuggestions");
@@ -1080,7 +1084,32 @@ function hideSuggestions() {
   suggestActive = -1;
 }
 
-function renderSuggestions(data, query) {
+function cancelSuggestionsAndHide() {
+  searchSubmitted = true;
+  clearTimeout(suggestTimer);
+  suggestSeq++;
+  if (suggestAbort) {
+    try {
+      suggestAbort.abort();
+    } catch (_) {}
+    suggestAbort = null;
+  }
+  hideSuggestions();
+}
+
+function getLocalMatches(query) {
+  const q = query.toLowerCase();
+  const songs = (appState.tracks || [])
+    .filter((t) => (t.title || "").toLowerCase().includes(q) || (t.artist || "").toLowerCase().includes(q))
+    .slice(0, 5);
+  const albums = (appState.albums || [])
+    .filter((a) => (a.title || "").toLowerCase().includes(q) || (a.artist || "").toLowerCase().includes(q))
+    .slice(0, 3);
+  return { songs, albums };
+}
+
+function renderSuggestions(data, query, isLoadingLive = false) {
+  if (searchSubmitted) return;
   const box = document.getElementById("searchSuggestions");
   if (!box) return;
   const songs = data.songs || [];
@@ -1092,7 +1121,9 @@ function renderSuggestions(data, query) {
   suggestActive = -1;
 
   if (suggestItems.length === 0) {
-    box.innerHTML = `<div class="suggest-empty">"${escapeHtml(query)}" için sonuç bulunamadı</div>`;
+    box.innerHTML = isLoadingLive
+      ? `<div class="suggest-empty">🔍 "${escapeHtml(query)}" için öneriler getiriliyor...</div>`
+      : `<div class="suggest-empty">"${escapeHtml(query)}" için sonuç bulunamadı</div>`;
     box.classList.remove("hidden");
     return;
   }
@@ -1123,22 +1154,70 @@ function renderSuggestions(data, query) {
   box.classList.remove("hidden");
 }
 
+function mergeSuggestResults(localData, liveData) {
+  const seenSongs = new Set();
+  const songs = [];
+  for (const s of [...(localData.songs || []), ...(liveData.songs || [])]) {
+    const key = `${(s.title || "").toLowerCase()}|${(s.artist || "").toLowerCase()}`;
+    if (!seenSongs.has(key) && songs.length < 6) {
+      seenSongs.add(key);
+      songs.push(s);
+    }
+  }
+  const seenAlbums = new Set();
+  const albums = [];
+  for (const a of [...(localData.albums || []), ...(liveData.albums || [])]) {
+    const key = `${(a.title || "").toLowerCase()}|${(a.artist || "").toLowerCase()}`;
+    if (!seenAlbums.has(key) && albums.length < 4) {
+      seenAlbums.add(key);
+      albums.push(a);
+    }
+  }
+  return { songs, albums };
+}
+
 async function fetchSuggestions(query) {
-  const seq = ++suggestSeq;
+  if (searchSubmitted) return;
+  const key = query.toLowerCase();
+  if (clientSuggestCache.has(key)) {
+    const curVal = (document.getElementById("globalSearchInput")?.value || "").trim();
+    if (!searchSubmitted && curVal) {
+      renderSuggestions(clientSuggestCache.get(key), curVal, false);
+    }
+    return;
+  }
+
+  if (suggestAbort) {
+    try {
+      suggestAbort.abort();
+    } catch (_) {}
+  }
+  const ctrl = new AbortController();
+  suggestAbort = ctrl;
+
   try {
-    const res = await fetch(`/api/suggest?q=${encodeURIComponent(query)}`);
-    const data = await res.json();
-    if (seq !== suggestSeq) return; // a newer keystroke already fired
+    const res = await fetch(`/api/suggest?q=${encodeURIComponent(query)}`, { signal: ctrl.signal });
+    const liveData = await res.json();
+    if (searchSubmitted) return;
     const input = document.getElementById("globalSearchInput");
-    if (!input || input.value.trim() !== query) return;
-    renderSuggestions(data, query);
+    const curVal = (input ? input.value : "").trim();
+    if (!curVal) {
+      hideSuggestions();
+      return;
+    }
+    const merged = mergeSuggestResults(getLocalMatches(curVal), liveData);
+    clientSuggestCache.set(key, merged);
+    // Render immediately while user is typing (even if they typed 1-2 more letters while in flight)
+    if (curVal.toLowerCase().startsWith(key) || key.startsWith(curVal.toLowerCase())) {
+      renderSuggestions(merged, curVal, false);
+    }
   } catch (_) {}
 }
 
 function selectSuggestion(idx) {
   const item = suggestItems[idx];
   if (!item) return;
-  hideSuggestions();
+  cancelSuggestionsAndHide();
   const input = document.getElementById("globalSearchInput");
   if (item.type === "song") {
     const s = item.data;
@@ -1174,12 +1253,22 @@ document.addEventListener("DOMContentLoaded", () => {
     searchInput.addEventListener("input", () => {
       const q = searchInput.value.trim();
       clearTimeout(suggestTimer);
-      if (q.length < 2) {
-        suggestSeq++;
-        hideSuggestions();
+      if (q.length < 1) {
+        cancelSuggestionsAndHide();
         return;
       }
-      suggestTimer = setTimeout(() => fetchSuggestions(q), 250);
+      searchSubmitted = false;
+      // 1. Show instant local matches (or loading state) in 0ms while typing!
+      const cached = clientSuggestCache.get(q.toLowerCase());
+      if (cached) {
+        renderSuggestions(cached, q, false);
+        return;
+      }
+      const local = getLocalMatches(q);
+      renderSuggestions(local, q, true);
+
+      // 2. Fetch live catalog matches with minimal 80ms debounce while typing
+      suggestTimer = setTimeout(() => fetchSuggestions(q), 80);
     });
 
     searchInput.addEventListener("keydown", (e) => {
@@ -1197,16 +1286,22 @@ document.addEventListener("DOMContentLoaded", () => {
         if (open && suggestActive >= 0) {
           selectSuggestion(suggestActive);
         } else {
-          hideSuggestions();
-          performLiveSearch(searchInput.value);
+          const val = searchInput.value;
+          cancelSuggestionsAndHide();
+          searchInput.blur();
+          performLiveSearch(val);
         }
       } else if (e.key === "Escape") {
-        hideSuggestions();
+        cancelSuggestionsAndHide();
       }
     });
 
     searchInput.addEventListener("focus", () => {
-      if (searchInput.value.trim().length >= 2 && box && box.innerHTML) box.classList.remove("hidden");
+      const q = searchInput.value.trim();
+      if (q.length >= 1 && !searchSubmitted) {
+        const local = clientSuggestCache.get(q.toLowerCase()) || getLocalMatches(q);
+        renderSuggestions(local, q, false);
+      }
     });
   }
 
@@ -1227,8 +1322,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (searchBtn) {
     searchBtn.addEventListener("click", () => {
-      hideSuggestions();
-      performLiveSearch(searchInput.value);
+      const val = searchInput.value;
+      cancelSuggestionsAndHide();
+      performLiveSearch(val);
     });
   }
 
