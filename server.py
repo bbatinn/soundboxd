@@ -22,7 +22,9 @@ from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "soundboxd.db"
+DATA_DIR = Path(os.environ.get("RAILWAY_VOLUME_MOUNT_PATH", str(BASE_DIR)))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = DATA_DIR / "soundboxd.db"
 STATIC_DIR = BASE_DIR / "public"
 PORT = int(os.environ.get("PORT", 8080))
 
@@ -182,6 +184,9 @@ def init_db():
             ('seed-portishead-glory-box', 'Glory Box', 'Portishead', 'Dummy', 1994, 'Trip-Hop', 308, 'https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/c1/71/93/c1719342-df7d-e9c5-c87c-53dae5afb289/00042282855329.rgb.jpg/600x600bb.jpg', 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/40/b2/a4/40b2a45b-eacf-818f-7af6-f7f8b3885230/mzaf_16256497095178600689.plus.aac.p.m4a', '', 'curated'),
             ('seed-tyler-earfquake', 'EARFQUAKE', 'Tyler, The Creator', 'IGOR', 2019, 'Neo-Soul / Alternative Hip-Hop', 207, 'https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/22/fd/10/22fd10a3-881d-2560-64e7-a9df650b9e47/17UM1IM42651.rgb.jpg/600x600bb.jpg', 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/ea/a6/99/eaa699af-33dc-3f58-5ebd-e4b830707647/mzaf_11136703388258616116.plus.aac.p.m4a', '', 'curated'),
             ('seed-cem-karaca-tamirci', 'Tamirci Çırağı', 'Cem Karaca', 'Yoksulluk Kader Olamaz', 1975, 'Anatolian Rock', 296, 'https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/85/20/ae/8520ae1f-63fc-ab56-6467-67e5a381bd27/cover.jpg/600x600bb.jpg', 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/39/8a/d3/398ad3a6-2d65-7c08-94fe-04004c509e70/mzaf_12582990614670416404.plus.aac.p.m4a', '', 'curated'),
+            ('itunes-1716096823', 'Time is Running Out', 'Muse', 'Absolution', 2003, 'Rock', 236, 'https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/4a/73/ab/4a73abdf-1d55-b3fe-484d-e023a507428e/5054197904233.jpg/600x600bb.jpg', 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/6d/97/80/6d9780b4-c55b-1a44-efbd-f5b474db05f8/mzaf_11184790201860208089.plus.aac.p.m4a', 'https://music.apple.com/us/album/time-is-running-out/1716096819?i=1716096823&uo=4', 'itunes-api'),
+            ('itunes-268603478', 'In My Time of Need', 'Opeth', 'Damnation', 2003, 'Metal', 346, 'https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/3e/bf/fd/3ebffd50-2061-862e-7160-cbba45f99e74/828768291122.jpg/600x600bb.jpg', 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/38/97/75/389775bf-6618-e953-335d-76210ad4ac3e/mzaf_15973449658923841508.plus.aac.p.m4a', 'https://music.apple.com/us/album/in-my-time-of-need/268603296?i=268603478&uo=4', 'itunes-api'),
+            ('itunes-918614531', 'Starless', 'King Crimson', 'Red (Expanded Edition)', 1974, 'Prog-Rock/Art Rock', 744, 'https://is1-ssl.mzstatic.com/image/thumb/Music4/v4/a8/5d/d3/a85dd370-ed7e-1e6f-f2ee-5464f7b3a978/Red_2500px.jpg/600x600bb.jpg', 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/2b/0d/38/2b0d3843-3d77-9280-db2f-ca04f165e5ca/mzaf_6567600515713287450.plus.aac.p.m4a', 'https://music.apple.com/us/album/starless/918614446?i=918614531&uo=4', 'itunes-api'),
         ]
         cur.executemany(
             """
@@ -267,16 +272,17 @@ def init_db():
             seed_reviews,
         )
 
-        # Favorites Top 4
+        # Favorites Top 4 (Synced from user's PC setup)
         favorites = [
-            (1, "seed-daft-punk-veridis-quo"),
-            (2, "seed-baris-manco-donence"),
+            (1, "itunes-1716096823"),
+            (2, "itunes-268603478"),
             (3, "seed-radiohead-weird-fishes"),
-            (4, "seed-frank-ocean-nights"),
+            (4, "itunes-918614531"),
         ]
         cur.executemany("INSERT INTO favorites (slot, track_id) VALUES (?, ?)", favorites)
 
-        # Listenlist
+        # Listenlist (Playlist)
+        cur.execute("INSERT INTO listenlist (track_id) VALUES (?)", ("itunes-268603478",))
         cur.execute("INSERT INTO listenlist (track_id) VALUES (?)", ("seed-kendrick-wesleys-theory",))
         cur.execute("INSERT INTO listenlist (track_id) VALUES (?)", ("seed-sebo-sigara",))
 
