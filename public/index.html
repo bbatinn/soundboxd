@@ -45,7 +45,7 @@
         <button class="nav-tab" data-tab="diary" onclick="switchTab('diary')">DIARY & REVIEWS</button>
         <button class="nav-tab" data-tab="lists" onclick="switchTab('lists')">LISTS</button>
         <button class="nav-tab" data-tab="listenlist" onclick="switchTab('listenlist')">
-          LISTENLIST <span id="listenlistBadge" class="badge">0</span>
+          PLAYLIST <span id="listenlistBadge" class="badge">0</span>
         </button>
       </nav>
     </div>
@@ -160,12 +160,12 @@
       <div id="customListsContainer" class="lists-grid"></div>
     </section>
 
-    <!-- TAB 4: LISTENLIST (WATCHLIST EQUIVALENT) -->
+    <!-- TAB 4: PLAYLIST -->
     <section id="tab-listenlist" class="tab-panel">
       <div class="section-header">
         <div>
-          <h2>LISTENLIST</h2>
-          <p class="section-subtitle">Tracks you have saved to listen to and rate later.</p>
+          <h2>PLAYLIST</h2>
+          <p class="section-subtitle">Tracks you have saved to your personal playlist to listen to and rate.</p>
         </div>
       </div>
       <div id="listenlistGrid" class="poster-grid"></div>
@@ -201,7 +201,7 @@
               ▶ Play Preview
             </button>
             <button id="modalListenlistBtn" class="btn-secondary-full" onclick="toggleCurrentModalListenlist()">
-              + Add to Listenlist
+              + Add to Playlist
             </button>
             <div class="fav-slot-bar">
               <span>Set in Profile Top 4:</span>
@@ -330,7 +330,8 @@
         <input type="text" id="newListTitle" required placeholder="e.g., Late Night Highway Drives" />
         <label>DESCRIPTION</label>
         <textarea id="newListDesc" rows="2" placeholder="What is the story or mood behind this list?"></textarea>
-        <label>SELECT TRACKS TO INCLUDE</label>
+        <label>SELECT OR SEARCH TRACKS TO INCLUDE</label>
+        <input type="text" id="listTrackSearchInput" placeholder="Search any song or artist from live catalog..." oninput="searchTracksForListModal(this.value)" style="margin-bottom:6px;" />
         <div id="newListTrackCheckboxes" class="checkbox-track-list"></div>
         <button type="submit" class="btn-save-log mt-small">Create List</button>
       </form>

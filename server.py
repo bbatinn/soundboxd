@@ -433,7 +433,7 @@ _SUGGEST_CACHE = {}
 
 
 def get_search_suggestions(query: str):
-    """Fast typeahead: local matches + parallel live iTunes songs/albums. No DB writes."""
+    """Fast typeahead: prefix local matches + parallel live iTunes songs/albums (millions of tracks)."""
     from concurrent.futures import ThreadPoolExecutor
 
     key = query.lower()
@@ -446,18 +446,29 @@ def get_search_suggestions(query: str):
     conn = get_db()
     try:
         cur = conn.cursor()
-        like = f"%{query}%"
+        prefix = f"{query}%"
+        word_prefix = f"% {query}%"
         cur.execute(
-            "SELECT id, title, artist, album, cover_url, preview_url, genre, release_year FROM tracks WHERE title LIKE ? OR artist LIKE ? LIMIT 5",
-            (like, like),
+            """
+            SELECT id, title, artist, album, cover_url, preview_url, genre, release_year
+            FROM tracks
+            WHERE title LIKE ? OR artist LIKE ? OR title LIKE ? OR artist LIKE ?
+            LIMIT 2
+            """,
+            (prefix, prefix, word_prefix, word_prefix),
         )
         for r in cur.fetchall():
             songs.append(dict(r))
             seen_songs.add((r["title"].lower(), r["artist"].lower()))
 
         cur.execute(
-            "SELECT id, title, artist, cover_url FROM albums WHERE title LIKE ? OR artist LIKE ? LIMIT 3",
-            (like, like),
+            """
+            SELECT id, title, artist, cover_url
+            FROM albums
+            WHERE title LIKE ? OR artist LIKE ? OR title LIKE ? OR artist LIKE ?
+            LIMIT 2
+            """,
+            (prefix, prefix, word_prefix, word_prefix),
         )
         for r in cur.fetchall():
             albums.append(dict(r))
@@ -468,21 +479,21 @@ def get_search_suggestions(query: str):
     def itunes(entity, limit):
         try:
             url = f"https://itunes.apple.com/search?term={urllib.parse.quote(query)}&entity={entity}&limit={limit}"
-            req = urllib.request.Request(url, headers={"User-Agent": "SongLarp/1.0"})
+            req = urllib.request.Request(url, headers={"User-Agent": "Larpmaxxing/1.0"})
             with urllib.request.urlopen(req, timeout=2.5) as resp:
                 return json.loads(resp.read().decode("utf-8")).get("results", [])
         except Exception:
             return []
 
     with ThreadPoolExecutor(max_workers=2) as ex:
-        fut_songs = ex.submit(itunes, "song", 6)
-        fut_albums = ex.submit(itunes, "album", 4)
+        fut_songs = ex.submit(itunes, "song", 8)
+        fut_albums = ex.submit(itunes, "album", 5)
         song_items = fut_songs.result()
         album_items = fut_albums.result()
 
     for it in song_items:
         sig = (it.get("trackName", "").lower(), it.get("artistName", "").lower())
-        if sig in seen_songs or len(songs) >= 6:
+        if sig in seen_songs or len(songs) >= 7:
             continue
         seen_songs.add(sig)
         songs.append({
@@ -1002,21 +1013,21 @@ class MultiModelRouter:
 
         model_info = cls.MODELS[selected_key]
 
-        # Check cache first to protect Argon & Claude tokens!
+        # Check cache first for deterministic moderation tasks, but always generate fresh recommendations/drafts!
         cache_key = f"{selected_key}:{task_type}:{json.dumps(payload, sort_keys=True, ensure_ascii=False)}"
-        conn = get_db()
         cached_row = None
-        try:
-            cur = conn.cursor()
-            cur.execute("SELECT response_json FROM ai_cache WHERE cache_key = ?", (cache_key,))
-            cached_row = cur.fetchone()
-        finally:
-            conn.close()
+        if task_type not in ("similar_tracks", "poetic_review"):
+            conn = get_db()
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT response_json FROM ai_cache WHERE cache_key = ?", (cache_key,))
+                cached_row = cur.fetchone()
+            finally:
+                conn.close()
 
         if cached_row:
             res = json.loads(cached_row["response_json"])
             res["cached"] = True
-            res["token_note"] = "Önbellekten (Cache) getirildi — 0 yeni token harcandı!"
             return res
 
         # Execute live API if keys are provided in .env, otherwise execute intelligent local engine
@@ -1179,64 +1190,178 @@ class MultiModelRouter:
             )
 
         if selected_key == "pro":
-            # Tier 2: Gemini Pro technical & similarity matching (dynamic genre & acoustic aware)
+            # Tier 2: Dynamic Live Catalog Similar Tracks Engine (queries Apple Music / iTunes live catalog)
+            import random
+            from concurrent.futures import ThreadPoolExecutor
+
             g_lower = (genre or "").lower()
             a_lower = (artist or "").lower()
-            if "rock" in g_lower or "metal" in g_lower:
-                if any(k in a_lower for k in ["duman", "mor ve ötesi", "manga", "şebnem", "teoman"]):
-                    recs = [
-                        "Mor ve Ötesi — Cambaz (Dynamic distortion and driving vocal energy)",
-                        "Kurban — Yalan (Heavy rhythmic groove and alternative rock edge)",
-                        "Mavi Sakal — İki Yol (90s Anatolian grunge atmosphere)",
-                    ]
+            t_lower = (track or "").lower()
+
+            neighbor_map = {
+                "arctic monkeys": ["The Strokes", "Franz Ferdinand", "Interpol", "The Last Shadow Puppets", "Cage the Elephant", "The Black Keys", "Kasabian", "The Libertines"],
+                "muse": ["Royal Blood", "Queens of the Stone Age", "Radiohead", "Placebo", "Nothing But Thieves", "Deftones", "Franz Ferdinand", "The Killers"],
+                "daft punk": ["Justice", "Modjo", "Kavinsky", "Röyksopp", "Air", "LCD Soundsystem", "Disclosure", "Cassius", "Parcels"],
+                "radiohead": ["The Smile", "Thom Yorke", "Portishead", "Massive Attack", "Interpol", "Sigur Rós", "Jeff Buckley", "Blur"],
+                "tame impala": ["MGMT", "Pond", "Beach House", "Unknown Mortal Orchestra", "Mac DeMarco", "Toro y Moi", "Khruangbin", "Empire of the Sun"],
+                "pink floyd": ["King Crimson", "Alan Parsons Project", "Camel", "Led Zeppelin", "Porcupine Tree", "Dire Straits", "Supertramp"],
+                "kendrick lamar": ["J. Cole", "Anderson .Paak", "OutKast", "A Tribe Called Quest", "Kanye West", "Tyler, The Creator", "Nas", "Joey Bada$$"],
+                "frank ocean": ["Daniel Caesar", "Steve Lacy", "SZA", "Blood Orange", "Brent Faiyaz", "Childish Gambino", "The Weeknd", "Solange"],
+                "barış manço": ["Cem Karaca", "Erkin Koray", "Moğollar", "Altın Gün", "3 Hürel", "Edip Akbayram"],
+                "şebnem ferah": ["Pentagram", "Mor ve Ötesi", "Teoman", "Duman", "Kurban", "Hayko Cepkin", "Vega"],
+                "duman": ["Mor ve Ötesi", "Teoman", "Yavuz Çetin", "Kurban", "Pinhani", "Gripin", "Manga"],
+                "mor ve ötesi": ["Duman", "Şebnem Ferah", "Kurban", "Athena", "Vega", "Manga", "Teoman"],
+            }
+
+            candidate_queries = []
+            for key_artist, neighbors in neighbor_map.items():
+                if key_artist in a_lower:
+                    candidate_queries.extend(neighbors)
+                    break
+
+            if not candidate_queries:
+                if any(k in a_lower for k in ["cem karaca", "erkin koray", "teoman", "manga", "athena", "pentagram"]):
+                    candidate_queries = ["Mor ve Ötesi", "Duman", "Şebnem Ferah", "Cem Karaca", "Erkin Koray", "Altın Gün"]
+                elif "rock" in g_lower or "alternative" in g_lower or "indie" in g_lower:
+                    candidate_queries = ["The Strokes", "Interpol", "Queens of the Stone Age", "Deftones", "Pixies", "The Smashing Pumpkins", "Gorillaz", "Fontaines D.C.", "Sonic Youth"]
+                elif "rap" in g_lower or "hip" in g_lower:
+                    candidate_queries = ["Nas", "A Tribe Called Quest", "OutKast", "J. Cole", "Tyler, The Creator", "MF DOOM", "Freddie Gibbs", "Little Simz"]
+                elif "electronic" in g_lower or "house" in g_lower or "synth" in g_lower or "dance" in g_lower:
+                    candidate_queries = ["Justice", "Kavinsky", "LCD Soundsystem", "Bicep", "Röyksopp", "Chemical Brothers", "Aphex Twin", "Four Tet", "Bonobo"]
+                elif "r&b" in g_lower or "soul" in g_lower:
+                    candidate_queries = ["Steve Lacy", "Daniel Caesar", "SZA", "Blood Orange", "Erykah Badu", "D'Angelo", "Anderson .Paak", "Kaytranada"]
                 else:
-                    recs = [
-                        "Arctic Monkeys — 505 (Dark guitar riffs and slow-building tension)",
-                        "The Strokes — Reptilia (Driving percussion and melodic garage rock)",
-                        "Radiohead — 2 + 2 = 5 (Dynamic crescendos and experimental rock structure)",
-                    ]
-            elif "rap" in g_lower or "hip" in g_lower:
-                recs = [
-                    "Nas — N.Y. State of Mind (Lyrical depth and classic boom-bap rhythm)",
-                    "J. Cole — Middle Child (Intimate storytelling and warm brass samples)",
-                    "A Tribe Called Quest — Electric Relaxation (Jazz-inflected organic groove)",
-                ]
-            elif "electronic" in g_lower or "house" in g_lower or "synth" in g_lower:
-                recs = [
-                    "Justice — Genesis (Analog synth swells and French touch texture)",
-                    "Kavinsky — Nightcall (Cinematic retro-wave midnight atmosphere)",
-                    "LCD Soundsystem — Someone Great (Melodic melancholy over layered synths)",
-                ]
-            elif "r&b" in g_lower or "soul" in g_lower:
-                recs = [
-                    "Steve Lacy — Bad Habit (Lo-fi guitar groove and intimate vocals)",
-                    "Daniel Caesar — Japanese Denim (Warm analog R&B harmony)",
-                    "Blood Orange — Charcoal Baby (Lush synth textures and nostalgia)",
-                ]
-            else:
-                recs = [
-                    "Portishead — Glory Box (Hypnotic trip-hop strings and deep atmosphere)",
-                    "The Smile — Pana-vision (Intricate time signatures and piano harmony)",
-                    "Altın Gün — Süpürgesi Yoncadan (Organic rhythm and psychedelic flow)",
-                ]
+                    candidate_queries = ["Portishead", "Massive Attack", "Beach House", "Gorillaz", "Khruangbin", "Fleetwood Mac", "Jeff Buckley", "Cocteau Twins"]
+
+            # Always include the artist itself (to find another great track by them) + 3 random sonic neighbors
+            sampled_neighbors = random.sample(candidate_queries, min(3, len(candidate_queries)))
+            search_terms = [artist] + sampled_neighbors
+
+            reasons_pool = [
+                f"Shares the {genre} sonic palette and rhythmic drive",
+                "Complementary production layers and atmospheric progression",
+                "Similar harmonic tension and dynamic arrangement",
+                "Closely aligned timbre, groove, and late-night mood",
+                f"Essential companion track for fans of {artist}",
+            ]
+
+            def fetch_term(term):
+                try:
+                    url = f"https://itunes.apple.com/search?term={urllib.parse.quote(term)}&entity=song&limit=6"
+                    req = urllib.request.Request(url, headers={"User-Agent": "Larpmaxxing/1.0"})
+                    with urllib.request.urlopen(req, timeout=3.0) as resp:
+                        return json.loads(resp.read().decode("utf-8")).get("results", [])
+                except Exception:
+                    return []
+
+            raw_Pool = []
+            with ThreadPoolExecutor(max_workers=4) as ex:
+                for items in ex.map(fetch_term, search_terms):
+                    if items:
+                        # Shuffle items from each artist so repeated clicks surface different songs
+                        shuffled = list(items[:5])
+                        random.shuffle(shuffled)
+                        raw_Pool.extend(shuffled[:2])
+
+            seen_sigs = {(t_lower, a_lower)}
+            rec_tracks = []
+            recs_text = []
+
+            random.shuffle(raw_Pool)
+            for item in raw_Pool:
+                t_name = (item.get("trackName") or "").strip()
+                a_name = (item.get("artistName") or "").strip()
+                if not t_name or not a_name:
+                    continue
+                sig = (t_name.lower(), a_name.lower())
+                if sig in seen_sigs or t_lower in t_name.lower():
+                    continue
+                seen_sigs.add(sig)
+                tid = f"itunes-{item.get('trackId')}"
+                rd = item.get("releaseDate", "2020")
+                year = int(rd[:4]) if rd and rd[:4].isdigit() else 2020
+                reason = random.choice(reasons_pool)
+                t_obj = {
+                    "id": tid,
+                    "title": t_name,
+                    "artist": a_name,
+                    "album": item.get("collectionName", "Single"),
+                    "release_year": year,
+                    "genre": item.get("primaryGenreName", genre or "Music"),
+                    "duration_sec": int(item.get("trackTimeMillis", 210000) / 1000),
+                    "cover_url": (item.get("artworkUrl100") or "").replace("100x100bb", "600x600bb"),
+                    "preview_url": item.get("previewUrl", ""),
+                    "external_url": item.get("trackViewUrl", ""),
+                    "reason": reason,
+                }
+                rec_tracks.append(t_obj)
+                recs_text.append(f"{a_name} — {t_name} ({reason})")
+                if len(rec_tracks) >= 4:
+                    break
+
+            # Persist recommended tracks so clicking them opens their modal seamlessly
+            if rec_tracks:
+                conn = get_db()
+                try:
+                    cur = conn.cursor()
+                    for rt in rec_tracks:
+                        cur.execute(
+                            """
+                            INSERT OR IGNORE INTO tracks (id, title, artist, album, release_year, genre, duration_sec, cover_url, preview_url, external_url, source)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'recommended')
+                            """,
+                            (
+                                rt["id"],
+                                rt["title"],
+                                rt["artist"],
+                                rt["album"],
+                                rt["release_year"],
+                                rt["genre"],
+                                rt["duration_sec"],
+                                rt["cover_url"],
+                                rt["preview_url"],
+                                rt["external_url"],
+                            ),
+                        )
+                    conn.commit()
+                finally:
+                    conn.close()
+
             return (
                 {
-                    "analysis_title": f"Acoustic & Similarity Analysis for '{track}'",
-                    "sonic_signature": f"{artist} blends {genre} textures with dynamic frequency transitions on this track.",
-                    "recommendations": recs,
+                    "analysis_title": f"Acoustic & Similarity Recommendations for '{track}'",
+                    "sonic_signature": f"Live catalog matches tailored to {artist}'s {genre} sound.",
+                    "recommendations": recs_text,
+                    "recommended_tracks": rec_tracks,
                 },
                 310,
                 145,
             )
 
         if selected_key == "claude":
-            # Tier 3: Claude Sonnet 4.5 literary/poetic review generation
-            base_thought = draft if draft else f"The moment {track} begins, the entire room shifts."
-            poetic = (
-                f"“{base_thought} With '{track}', {artist} doesn't just build a melody—they leave a key "
-                f"to a half-forgotten room in your memory. Every bar deepens the {genre} textures, "
-                f"leaving a cinematic stillness that lingers long after the final note fades.”"
-            )
+            # Tier 3: Claude Sonnet 4.5 literary/poetic review generation with varied templates
+            import random
+            templates = [
+                (
+                    f"“{draft + ' ' if draft else ''}With '{track}', {artist} doesn't just build a melody—they leave a key "
+                    f"to a half-forgotten room in your memory. Every bar deepens the {genre} textures, "
+                    f"leaving a cinematic stillness that lingers long after the final note fades.”"
+                ),
+                (
+                    f"“{draft + ' ' if draft else ''}There is an unmistakable gravity to '{track}'. {artist} balances raw emotion "
+                    f"and {genre} precision so effortlessly that the song feels less like a studio recording and more like "
+                    f"a late-night confession captured on tape.”"
+                ),
+                (
+                    f"“{draft + ' ' if draft else ''}Listening to '{track}' feels like watching city lights blur through a rain-streaked window. "
+                    f"{artist} stretches time across every chord change, turning a {genre} arrangement into pure nocturnal cinema.”"
+                ),
+                (
+                    f"“{draft + ' ' if draft else ''}Few tracks earn their crescendo the way '{track}' does. {artist} layers rhythm and atmosphere "
+                    f"until the production feels weightless—an essential {genre} landmark you want to replay the second it ends.”"
+                ),
+            ]
+            poetic = random.choice(templates)
             return (
                 {
                     "editorial_title": "Editorial Poetic Review Draft",
@@ -1339,7 +1464,7 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
                            OR id IN (SELECT track_id FROM favorites)
                            OR id IN (SELECT track_id FROM listenlist)
                         ORDER BY CASE WHEN source = 'curated' THEN 0 ELSE 1 END, created_at DESC
-                        LIMIT 24
+                        LIMIT 48
                         """
                     )
                     tracks = enrich_tracks_with_stats([dict(r) for r in cur.fetchall()])
@@ -1740,12 +1865,31 @@ class SoundboxdHandler(SimpleHTTPRequestHandler):
             if path == "/api/lists/create":
                 title = str(body.get("title", "")).strip()
                 if not title:
-                    return self._send_json({"error": "title gerekli"}, 400)
+                    return self._send_json({"error": "title is required"}, 400)
                 description = str(body.get("description", "")).strip()
                 track_ids = body.get("track_ids", [])
+                tracks_meta = body.get("tracks_meta", [])
                 conn = get_db()
                 try:
                     cur = conn.cursor()
+                    for tm in tracks_meta:
+                        if tm.get("id"):
+                            cur.execute(
+                                """
+                                INSERT OR IGNORE INTO tracks (id, title, artist, album, release_year, genre, cover_url, preview_url, source)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'list-added')
+                                """,
+                                (
+                                    tm["id"],
+                                    tm.get("title", "Track"),
+                                    tm.get("artist", "Artist"),
+                                    tm.get("album", "Single"),
+                                    tm.get("release_year") or 2022,
+                                    tm.get("genre", "Music"),
+                                    tm.get("cover_url", ""),
+                                    tm.get("preview_url", ""),
+                                ),
+                            )
                     cur.execute(
                         "INSERT INTO custom_lists (title, description, track_ids) VALUES (?, ?, ?)",
                         (title, description, json.dumps(track_ids)),

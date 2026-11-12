@@ -505,7 +505,7 @@ async function openTrackModal(trackId) {
   document.getElementById("modalAiHelperOutput").classList.add("hidden");
 
   const listenBtn = document.getElementById("modalListenlistBtn");
-  listenBtn.textContent = track.in_listenlist ? "✓ In Listenlist (Remove)" : "+ Add to Listenlist";
+  listenBtn.textContent = track.in_listenlist ? "✓ In Playlist (Remove)" : "+ Add to Playlist";
 
   renderModalHistogram(track);
   renderModalReviews(track);
@@ -637,11 +637,13 @@ async function submitReviewForm(e) {
 async function toggleCurrentModalListenlist() {
   if (!appState.currentModalTrack) return;
   if (appState.backendAvailable) {
-    await fetch("/api/listenlist/toggle", {
+    const res = await fetch("/api/listenlist/toggle", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ track_id: appState.currentModalTrack.id }),
     });
+    const data = await res.json().catch(() => ({}));
+    showToast(data.in_listenlist ? `✓ Added "${appState.currentModalTrack.title}" to Playlist!` : `Removed "${appState.currentModalTrack.title}" from Playlist`);
     await loadBootstrap();
     await openTrackModal(appState.currentModalTrack.id);
   }
@@ -708,7 +710,7 @@ async function assistSimilarWithPro() {
   if (!appState.currentModalTrack) return;
   const helperEl = document.getElementById("modalAiHelperOutput");
   helperEl.classList.remove("hidden");
-  helperEl.innerHTML = `🎧 Finding similar tracks...`;
+  helperEl.innerHTML = `🎧 Searching live catalog for similar tracks...`;
 
   const data = await callModelRouter("similar_tracks", {
     track_title: appState.currentModalTrack.title,
@@ -716,7 +718,50 @@ async function assistSimilarWithPro() {
     genre: appState.currentModalTrack.genre,
   });
 
-  const recs = (data.result.recommendations || []).map((r) => `<li>${r}</li>`).join("");
+  const recTracks = (data.result && data.result.recommended_tracks) || [];
+  if (recTracks.length > 0) {
+    recTracks.forEach((rt) => {
+      if (!appState.tracks.find((x) => x.id === rt.id)) {
+        appState.tracks.unshift({
+          avg_rating: 0,
+          review_count: 0,
+          likes_count: 0,
+          histogram: {},
+          ...rt,
+        });
+      }
+    });
+
+    const cardsHtml = recTracks
+      .map(
+        (rt) => `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 8px;margin-top:6px;background:rgba(15,20,26,0.65);border:1px solid var(--border-subtle);border-radius:6px;">
+        <div style="display:flex;align-items:center;gap:9px;min-width:0;cursor:pointer;" onclick="openTrackModal('${escapeHtml(rt.id)}')">
+          <img src="${escapeHtml(rt.cover_url || "")}" alt="" style="width:36px;height:36px;border-radius:4px;object-fit:cover;flex-shrink:0;" onerror="this.src='https://placehold.co/80x80/1b2228/00e054?text=♪'" />
+          <div style="min-width:0;">
+            <div style="font-size:0.82rem;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(rt.title)} — <span style="color:var(--lb-green);">${escapeHtml(rt.artist)}</span></div>
+            <div style="font-size:0.71rem;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(rt.reason || rt.genre || "")}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:5px;flex-shrink:0;">
+          ${rt.preview_url ? `<button type="button" class="btn-mini-play" onclick="quickPlayPreview('${escapeHtml(rt.id)}')">▶ Play</button>` : ""}
+          <button type="button" class="btn-mini-play" onclick="openTrackModal('${escapeHtml(rt.id)}')">★ Rate</button>
+        </div>
+      </div>`
+      )
+      .join("");
+
+    helperEl.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <strong>🎧 Similar Tracks from Live Catalog:</strong>
+        <button type="button" class="btn-mini-play" onclick="assistSimilarWithPro()" title="Fetch another set of recommendations">🔄 Refresh</button>
+      </div>
+      <div>${cardsHtml}</div>
+    `;
+    return;
+  }
+
+  const recs = (data.result.recommendations || []).map((r) => `<li>${escapeHtml(r)}</li>`).join("");
   helperEl.innerHTML = `
     <div><strong>🎧 Recommended Similar Tracks:</strong></div>
     <ul style="margin:6px 0 0 18px;">${recs}</ul>
@@ -724,20 +769,79 @@ async function assistSimilarWithPro() {
 }
 
 // ============================================================================
-// CUSTOM LISTS MODAL
+// CUSTOM LISTS MODAL (with Live Catalog Search)
 // ============================================================================
-function openCreateListModal() {
+let listModalSelectedTracks = new Map();
+let listSearchTimer = null;
+
+function renderListModalCheckboxes(candidateTracks) {
   const box = document.getElementById("newListTrackCheckboxes");
-  box.innerHTML = appState.tracks
-    .map(
-      (t) => `
-    <label class="checkbox-track-item">
-      <input type="checkbox" name="listTrack" value="${t.id}" />
-      <span><strong>${t.title}</strong> — ${t.artist}</span>
-    </label>
-  `
-    )
+  if (!box) return;
+  const combined = [];
+  const seen = new Set();
+  for (const [, tr] of listModalSelectedTracks.entries()) {
+    combined.push(tr);
+    seen.add(tr.id);
+  }
+  for (const t of candidateTracks || []) {
+    if (!seen.has(t.id)) {
+      combined.push(t);
+      seen.add(t.id);
+    }
+  }
+  box.innerHTML = combined
+    .map((t) => {
+      const isChecked = listModalSelectedTracks.has(t.id) ? "checked" : "";
+      return `
+      <label class="checkbox-track-item">
+        <input type="checkbox" name="listTrack" value="${escapeHtml(t.id)}" ${isChecked} onchange="toggleListModalTrack('${escapeHtml(t.id)}', this.checked)" />
+        <span><strong>${escapeHtml(t.title)}</strong> — ${escapeHtml(t.artist)}</span>
+      </label>
+    `;
+    })
     .join("");
+}
+
+let listModalPool = new Map();
+
+function toggleListModalTrack(trackId, checked) {
+  if (checked) {
+    const tr = listModalPool.get(trackId) || appState.tracks.find((x) => x.id === trackId);
+    if (tr) listModalSelectedTracks.set(trackId, tr);
+  } else {
+    listModalSelectedTracks.delete(trackId);
+  }
+}
+
+function searchTracksForListModal(query) {
+  clearTimeout(listSearchTimer);
+  const q = (query || "").trim();
+  if (!q) {
+    renderListModalCheckboxes(appState.tracks);
+    return;
+  }
+  const local = appState.tracks.filter(
+    (t) => (t.title || "").toLowerCase().includes(q.toLowerCase()) || (t.artist || "").toLowerCase().includes(q.toLowerCase())
+  );
+  renderListModalCheckboxes(local);
+  listSearchTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/suggest?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      const songs = data.songs || [];
+      songs.forEach((s) => listModalPool.set(s.id, s));
+      renderListModalCheckboxes([...local, ...songs]);
+    } catch (_) {}
+  }, 140);
+}
+
+function openCreateListModal() {
+  listModalSelectedTracks.clear();
+  listModalPool.clear();
+  appState.tracks.forEach((t) => listModalPool.set(t.id, t));
+  const searchEl = document.getElementById("listTrackSearchInput");
+  if (searchEl) searchEl.value = "";
+  renderListModalCheckboxes(appState.tracks);
   document.getElementById("listModal").classList.remove("hidden");
 }
 
@@ -749,14 +853,16 @@ async function submitNewList(e) {
   e.preventDefault();
   const title = document.getElementById("newListTitle").value.trim();
   const description = document.getElementById("newListDesc").value.trim();
-  const checked = Array.from(document.querySelectorAll('input[name="listTrack"]:checked')).map((el) => el.value);
+  const checked = Array.from(listModalSelectedTracks.keys());
+  const tracksMeta = Array.from(listModalSelectedTracks.values());
 
   if (appState.backendAvailable) {
     await fetch("/api/lists/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, description, track_ids: checked }),
+      body: JSON.stringify({ title, description, track_ids: checked, tracks_meta: tracksMeta }),
     });
+    showToast(`✓ Created list "${title}" with ${checked.length} tracks!`);
     await loadBootstrap();
   }
   closeCreateListModal();
@@ -1093,12 +1199,16 @@ function cancelSuggestionsAndHide() {
 
 function getLocalMatches(query) {
   const q = query.toLowerCase();
+  const matchesPrefix = (str) => {
+    const s = (str || "").toLowerCase();
+    return s.startsWith(q) || s.includes(" " + q);
+  };
   const songs = (appState.tracks || [])
-    .filter((t) => (t.title || "").toLowerCase().includes(q) || (t.artist || "").toLowerCase().includes(q))
-    .slice(0, 5);
+    .filter((t) => matchesPrefix(t.title) || matchesPrefix(t.artist))
+    .slice(0, 2);
   const albums = (appState.albums || [])
-    .filter((a) => (a.title || "").toLowerCase().includes(q) || (a.artist || "").toLowerCase().includes(q))
-    .slice(0, 3);
+    .filter((a) => matchesPrefix(a.title) || matchesPrefix(a.artist))
+    .slice(0, 2);
   return { songs, albums };
 }
 
@@ -1151,16 +1261,16 @@ function renderSuggestions(data, query, isLoadingLive = false) {
 function mergeSuggestResults(localData, liveData) {
   const seenSongs = new Set();
   const songs = [];
-  for (const s of [...(localData.songs || []), ...(liveData.songs || [])]) {
+  for (const s of [...(liveData.songs || []), ...(localData.songs || [])]) {
     const key = `${(s.title || "").toLowerCase()}|${(s.artist || "").toLowerCase()}`;
-    if (!seenSongs.has(key) && songs.length < 6) {
+    if (!seenSongs.has(key) && songs.length < 7) {
       seenSongs.add(key);
       songs.push(s);
     }
   }
   const seenAlbums = new Set();
   const albums = [];
-  for (const a of [...(localData.albums || []), ...(liveData.albums || [])]) {
+  for (const a of [...(liveData.albums || []), ...(localData.albums || [])]) {
     const key = `${(a.title || "").toLowerCase()}|${(a.artist || "").toLowerCase()}`;
     if (!seenAlbums.has(key) && albums.length < 4) {
       seenAlbums.add(key);
