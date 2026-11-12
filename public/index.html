@@ -79,6 +79,16 @@
 
     <!-- TAB 1: DISCOVER / TRACKS -->
     <section id="tab-discover" class="tab-panel active">
+      <!-- Compact Single-Row Recent Community Reviews Strip -->
+      <div class="section-header" style="margin-bottom:8px;padding-bottom:6px;">
+        <div style="display:flex;align-items:baseline;gap:10px;">
+          <h2 style="font-size:0.86rem;">RECENT COMMUNITY REVIEWS</h2>
+          <span class="section-subtitle" style="font-size:0.76rem;">Latest ratings &amp; notes from the community</span>
+        </div>
+        <button class="btn-mini-play" onclick="switchTab('diary')" style="font-size:0.72rem;">View Full Diary →</button>
+      </div>
+      <div id="recentReviewsList" class="reviews-stream"></div>
+
       <div class="section-header">
         <div>
           <h2 id="tracksGridTitle">POPULAR TRACKS</h2>
@@ -97,15 +107,6 @@
       <div id="tracksInfiniteSentinel" style="text-align:center;padding:24px 0;">
         <span id="tracksLoadingText" style="color:var(--text-secondary);font-size:0.85rem;display:none;">Loading more tracks...</span>
       </div>
-
-      <!-- Recent Community Reviews Stream -->
-      <div class="section-header mt-large">
-        <div>
-          <h2>RECENT COMMUNITY REVIEWS</h2>
-          <p class="section-subtitle">Latest track ratings and reviews shared by the community.</p>
-        </div>
-      </div>
-      <div id="recentReviewsList" class="reviews-stream"></div>
     </section>
 
     <!-- TAB: ALBUMS (ALBUM MODE) -->

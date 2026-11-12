@@ -319,30 +319,25 @@ function renderRecentReviews() {
   const el = document.getElementById("recentReviewsList");
   if (!el) return;
   el.innerHTML = appState.reviews
-    .slice(0, 8)
+    .slice(0, 10)
     .map((r) => {
-      const tags = (r.tags || "")
-        .split(",")
-        .filter(Boolean)
-        .map((tg) => `<span class="tag-chip">#${escapeHtml(tg.trim())}</span>`)
-        .join("");
       return `
-      <div class="review-card">
-        <img class="review-card-cover" src="${r.track_cover}" alt="${escapeHtml(r.track_title)}" onclick="openTrackModal('${r.track_id}')" onerror="this.src='https://placehold.co/200x200/1b2228/00e054?text=♪'" />
+      <div class="review-card" onclick="openTrackModal('${escapeHtml(r.track_id)}')" title="${escapeHtml(r.review_text || "")}" style="cursor:pointer;">
+        <img class="review-card-cover" src="${r.track_cover}" alt="${escapeHtml(r.track_title)}" onerror="this.src='https://placehold.co/200x200/1b2228/00e054?text=♪'" />
         <div class="review-card-body">
           <div class="review-header">
-            <span class="review-track-title" onclick="openTrackModal('${r.track_id}')">
-              ${escapeHtml(r.track_title)} <small style="color:var(--text-secondary);">(${escapeHtml(r.track_artist)})</small>
+            <span class="review-track-title">
+              ${escapeHtml(r.track_title)}
             </span>
             <span>
               <span class="review-stars">${formatStars(r.rating)}</span>
               ${r.liked ? '<span class="review-heart">♥</span>' : ""}
             </span>
           </div>
-          <p class="review-text">${r.review_text ? escapeHtml(r.review_text) : "<em>Rated without a review.</em>"}</p>
+          <p class="review-text">${r.review_text ? escapeHtml(r.review_text) : "<em>Rated</em>"}</p>
           <div class="review-footer">
-            <div>${tags}</div>
-            <span>👤 @${escapeHtml(r.username)} • 📅 ${escapeHtml(r.listen_date || "Today")}</span>
+            <span>${escapeHtml(r.track_artist)}</span>
+            <span>@${escapeHtml(r.username)}</span>
           </div>
         </div>
       </div>

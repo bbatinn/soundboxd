@@ -591,26 +591,39 @@ body {
   color: var(--text-muted);
 }
 
-/* COMMUNITY REVIEWS STREAM */
+/* COMMUNITY REVIEWS STREAM (Compact Single-Row Strip) */
 .reviews-stream {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 16px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  margin-bottom: 18px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-subtle) transparent;
 }
 
 .review-card {
+  flex: 0 0 270px;
+  max-width: 270px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 14px;
+  border-radius: 7px;
+  padding: 8px 10px;
   display: flex;
-  gap: 14px;
+  align-items: center;
+  gap: 10px;
+  transition: border-color 0.15s;
+}
+
+.review-card:hover {
+  border-color: var(--lb-blue);
 }
 
 .review-card-cover {
-  width: 68px;
-  height: 68px;
-  border-radius: 6px;
+  width: 44px;
+  height: 44px;
+  border-radius: 5px;
   object-fit: cover;
   cursor: pointer;
   flex-shrink: 0;
@@ -618,6 +631,7 @@ body {
 
 .review-card-body {
   flex: 1;
+  min-width: 0;
 }
 
 .review-header {
@@ -629,8 +643,11 @@ body {
 
 .review-track-title {
   font-weight: 700;
-  font-size: 0.94rem;
+  font-size: 0.8rem;
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .review-track-title:hover {
@@ -640,28 +657,34 @@ body {
 .review-stars {
   color: var(--lb-green);
   font-weight: 800;
-  font-size: 0.88rem;
+  font-size: 0.76rem;
+  white-space: nowrap;
 }
 
 .review-heart {
   color: var(--lb-orange);
-  margin-left: 4px;
+  margin-left: 3px;
 }
 
 .review-text {
-  font-size: 0.86rem;
+  font-size: 0.74rem;
   color: #dbe4ed;
-  margin: 7px 0;
+  margin: 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .review-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  font-size: 0.72rem;
+  gap: 4px;
+  font-size: 0.68rem;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tag-chip {
